@@ -40,14 +40,15 @@ bool PipeWireCapture::Start() {
     }
 
     // ── Create stream ──────────────────────────────────────────────────
-    const struct pw_properties* props =
+    // Note: pw_properties_new returns non-const in PipeWire 1.0.5.
+    // PW_KEY_ADAPTIVE_API was added in 1.2.x; omit on older versions.
+    struct pw_properties* props =
         pw_properties_new(
             PW_KEY_MEDIA_TYPE, "Audio",
             PW_KEY_MEDIA_CATEGORY, "Capture",
             PW_KEY_MEDIA_ROLE, "Communication",
             PW_KEY_NODE_NAME, "voice-input-capture",
             PW_KEY_NODE_DESCRIPTION, "Voice Input Audio Capture",
-            PW_KEY_ADAPTIVE_API, "true",
             nullptr
         );
 
@@ -72,22 +73,24 @@ bool PipeWireCapture::Start() {
 
     uint8_t buffer[1024];
 
-    spa_audio_info_raw audio_info{
-        .format = SPA_AUDIO_FORMAT_F32,
-        .channels = 1,
-        .rate = 16000,
-    };
+    spa_audio_info_raw audio_info = {};
+    audio_info.format = SPA_AUDIO_FORMAT_F32;
+    audio_info.channels = 1;
+    audio_info.rate = 16000;
 
+    struct spa_pod_builder podBuilder = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
     const spa_pod* params[1];
-    params[0] = spa_format_audio_raw_build(&spa_pod_builder{buffer, sizeof(buffer)},
-                                            SPA_PARAM_EnumFormat, &audio_info);
+    params[0] = spa_format_audio_raw_build(&podBuilder,
+                                           SPA_PARAM_EnumFormat,
+                                           &audio_info);
 
     pw_stream_connect(stream_,
                       PW_DIRECTION_INPUT,
                       PW_ID_ANY,
-                      PW_STREAM_FLAG_AUTOCONNECT |
-                      PW_STREAM_FLAG_MAP_BUFFERS |
-                      PW_STREAM_FLAG_RT_PROCESS,
+                      static_cast<pw_stream_flags>(
+                          PW_STREAM_FLAG_AUTOCONNECT |
+                          PW_STREAM_FLAG_MAP_BUFFERS |
+                          PW_STREAM_FLAG_RT_PROCESS),
                       params, 1);
 
     // ── Start loop ────────────────────────────────────────────────────
@@ -121,12 +124,12 @@ void PipeWireCapture::Stop() {
     }
 }
 
-void PipeWireCapture::OnProcess(void* userdata, uint32_t id) {
+void PipeWireCapture::OnProcess(void* userdata) {
     auto* self = static_cast<PipeWireCapture*>(userdata);
-    self->OnProcessImpl(id);
+    self->OnProcessImpl();
 }
 
-void PipeWireCapture::OnProcessImpl(uint32_t id) {
+void PipeWireCapture::OnProcessImpl() {
     // ══════════════════════════════════════════════════════════════════
     // THIS RUNS INSIDE PW_THREAD_LOOP LOCK
     //   - Do NOT allocate large objects

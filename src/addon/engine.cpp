@@ -1,7 +1,9 @@
 #include "engine.h"
 
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/eventloop.h>
 #include <fcitx/addonloader.h>
+#include <fcitx/addonmanager.h>
 #include <fcitx/instance.h>
 
 namespace fcitx {

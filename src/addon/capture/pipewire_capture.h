@@ -41,8 +41,8 @@ public:
     AudioRingBuffer* RingBuffer() { return ringBuffer_.get(); }
 
 private:
-    static void OnProcess(void* userdata, uint32_t id);
-    void OnProcessImpl(uint32_t id);
+    static void OnProcess(void* userdata);
+    void OnProcessImpl();
 
     pw_thread_loop* loop_ = nullptr;
     pw_context* context_ = nullptr;
