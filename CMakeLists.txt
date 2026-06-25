@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Include custom find modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 # ─── Options ─────────────────────────────────────────────────────────────────
 option(ENABLE_LLM_SUPPORT "Enable LLM post-processing (libcurl)" OFF)
 option(ENABLE_CLOUD_ASR "Enable cloud ASR providers (command engine)" OFF)
@@ -17,10 +20,13 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FCITX5 REQUIRED fcitx5)
 
 # PipeWire audio capture
-pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
+find_package(PipeWire REQUIRED)
 
 # JSON parsing
 find_package(nlohmann_json REQUIRED)
+
+# sherpa-onnx ASR
+pkg_check_modules(SHERPA_ONNX sherpa-onnx)
 
 # ─── Sources ──────────────────────────────────────────────────────────────────
 set(ADDON_SOURCES
@@ -28,7 +34,6 @@ set(ADDON_SOURCES
     src/addon/config/config.cpp
     src/addon/capture/pipewire_capture.cpp
     src/addon/vad/vad.cpp
-    src/addon/asr/sherpa_asr.cpp
     src/addon/pipeline/pipeline.cpp
 )
 
@@ -51,12 +56,14 @@ target_include_directories(voice-input-addon PRIVATE
     ${FCITX5_INCLUDE_DIRS}
     ${PIPEWIRE_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}
+    ${EXTRA_INCLUDE_DIRS}
     src/addon
 )
 
 target_link_libraries(voice-input-addon PRIVATE
     ${FCITX5_LIBRARIES}
     ${PIPEWIRE_LIBRARIES}
+    ${EXTRA_LIBRARIES}
 )
 
 target_compile_definitions(voice-input-addon PRIVATE
@@ -69,7 +76,19 @@ if(ENABLE_LLM_SUPPORT)
     target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)
 endif()
 
+if(SHERPA_ONNX_FOUND)
+    list(APPEND ADDON_SOURCES src/addon/asr/sherpa_asr.cpp)
+    list(APPEND ADDON_HEADERS src/addon/asr/sherpa_asr.h)
+    list(APPEND EXTRA_INCLUDE_DIRS ${SHERPA_ONNX_INCLUDE_DIRS})
+    list(APPEND EXTRA_LIBRARIES ${SHERPA_ONNX_LIBRARIES})
+    target_compile_definitions(voice-input-addon PRIVATE ENABLE_SHERPA_ONNX)
+else()
+    message(STATUS "sherpa-onnx not found — ASR engine disabled, capture-only mode")
+endif()
+
 if(ENABLE_CLOUD_ASR)
+    list(APPEND ADDON_SOURCES src/addon/asr/command_engine.cpp)
+    list(APPEND ADDON_HEADERS src/addon/asr/command_engine.h)
     target_compile_definitions(voice-input-addon PRIVATE ENABLE_CLOUD_ASR)
 endif()
 
