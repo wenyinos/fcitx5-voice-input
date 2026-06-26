@@ -226,19 +226,18 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     // Also grab the Content-Type header to detect errors in non-JSON responses
     std::string contentType;
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
-        +[](void* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
-            auto* ct = static_cast<std::string*>(userdata);
-            std::string line(static_cast<char*>(ptr), size * nmemb);
-            if (line.rfind("Content-Type:", 0) == 0) {
-                *ct = line.substr(line.find(':') + 1);
-                // Trim whitespace
-                if (!ct->empty() && (*ct)[0] == ' ') ct->erase(0, 1);
-                if (!ct->empty() && (*ct).back() == '\r') ct->pop_back();
-                if (!ct->empty() && (*ct).back() == '\n') ct->pop_back();
-            }
-            return size * nmemb;
-        },
-        &contentType);
+                     +[](void* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
+                         auto* ct = static_cast<std::string*>(userdata);
+                         std::string line(static_cast<char*>(ptr), size * nmemb);
+                         if (line.rfind("Content-Type:", 0) == 0) {
+                             *ct = line.substr(line.find(':') + 1);
+                             if (!ct->empty() && (*ct)[0] == ' ') ct->erase(0, 1);
+                             if (!ct->empty() && (*ct).back() == '\r') ct->pop_back();
+                             if (!ct->empty() && (*ct).back() == '\n') ct->pop_back();
+                         }
+                         return size * nmemb;
+                     });
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &contentType);
 
     // Perform request
     CURLcode res = curl_easy_perform(curl);
