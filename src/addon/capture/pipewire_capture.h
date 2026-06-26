@@ -43,6 +43,7 @@ public:
 private:
     static void OnProcess(void* userdata);
     void OnProcessImpl();
+    void Cleanup(bool stopLoop);
 
     pw_thread_loop* loop_ = nullptr;
     pw_context* context_ = nullptr;
