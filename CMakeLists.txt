@@ -108,11 +108,11 @@ configure_file(
 
 # ─── Install ──────────────────────────────────────────────────────────────────
 install(TARGETS voice-input-addon
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/fcitx5
+    LIBRARY DESTINATION lib/fcitx5
 )
 
 install(FILES ${CMAKE_BINARY_DIR}/share/fcitx5/addon/voiceinput.conf
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/fcitx5/addon
+    DESTINATION share/fcitx5/addon
 )
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
