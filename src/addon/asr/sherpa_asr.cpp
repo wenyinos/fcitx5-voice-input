@@ -1,3 +1,5 @@
+#ifdef ENABLE_SHERPA_ONNX
+
 #include "sherpa_asr.h"
 
 #include <cstring>
@@ -91,7 +93,7 @@ void SherpaAsrEngine::Start() {
 
     // Start the inference thread if not already running
     if (!inferenceThread_) {
-        running_ = true;  // ← FIX: was missing in original
+        running_ = true;
         inferenceThread_ = std::make_unique<std::thread>(
             &SherpaAsrEngine::InferenceLoop, this);
     }
@@ -109,11 +111,6 @@ void SherpaAsrEngine::FeedAudio(const float* pcm, size_t frames) {
 void SherpaAsrEngine::Stop() {
     sessionActive_ = false;
     audioQueue_.Push(AudioChunk{});  // wake up the inference thread (EOF)
-
-    // NOTE: do NOT join the thread here — that would block the main
-    // Fcitx event loop. The inference thread will process the final
-    // result and fire the callback on its own; cleanup happens in
-    // the next Start() call (or the destructor).
 }
 
 void SherpaAsrEngine::InferenceLoop() {
@@ -144,8 +141,7 @@ void SherpaAsrEngine::InferenceLoop() {
         }
     }
 
-    // Thread is exiting — if this is a genuine session end (not a shutdown),
-    // process the final result from the stream.
+    // Thread is exiting
     if (!running_) return;  // engine is shutting down, skip callback
 
     if (stream_ && recognizer_) {
@@ -164,3 +160,5 @@ void SherpaAsrEngine::InferenceLoop() {
 }
 
 } // namespace fcitx
+
+#endif // ENABLE_SHERPA_ONNX

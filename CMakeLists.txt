@@ -9,8 +9,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # ─── Options ─────────────────────────────────────────────────────────────────
+option(ENABLE_SHERPA_ONNX "Enable local ASR via sherpa-onnx" OFF)
 option(ENABLE_LLM_SUPPORT "Enable LLM post-processing (libcurl)" OFF)
-option(ENABLE_CLOUD_ASR "Enable cloud ASR providers (command engine)" OFF)
 option(BUILD_TESTS "Build unit tests" OFF)
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
@@ -23,7 +23,6 @@ if(NOT FCITX5_FOUND)
 endif()
 
 # PipeWire audio capture
-# Module name differs: "pipewire-0.3" (Arch) vs "libpipewire-0.3" (Ubuntu/Debian)
 pkg_check_modules(PIPEWIRE QUIET pipewire-0.3)
 if(NOT PIPEWIRE_FOUND)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -32,8 +31,16 @@ endif()
 # JSON parsing
 find_package(nlohmann_json REQUIRED)
 
-# sherpa-onnx ASR
-pkg_check_modules(SHERPA_ONNX sherpa-onnx)
+# HTTP client (for OpenAI-compatible ASR)
+find_package(CURL REQUIRED)
+
+# sherpa-onnx local ASR (optional)
+if(ENABLE_SHERPA_ONNX)
+    pkg_check_modules(SHERPA_ONNX sherpa-onnx)
+    if(NOT SHERPA_ONNX_FOUND)
+        message(FATAL_ERROR "ENABLE_SHERPA_ONNX=ON but sherpa-onnx not found via pkg-config")
+    endif()
+endif()
 
 # ─── Sources ──────────────────────────────────────────────────────────────────
 set(ADDON_SOURCES
@@ -42,6 +49,7 @@ set(ADDON_SOURCES
     src/addon/capture/pipewire_capture.cpp
     src/addon/vad/vad.cpp
     src/addon/pipeline/pipeline.cpp
+    src/addon/asr/openai_asr.cpp
 )
 
 set(ADDON_HEADERS
@@ -50,7 +58,7 @@ set(ADDON_HEADERS
     src/addon/capture/pipewire_capture.h
     src/addon/vad/vad.h
     src/addon/asr/asr_engine.h
-    src/addon/asr/sherpa_asr.h
+    src/addon/asr/openai_asr.h
     src/addon/pipeline/pipeline.h
     src/addon/utils/audio_buffer.h
     src/addon/utils/thread_safe_queue.h
@@ -63,40 +71,31 @@ target_include_directories(voice-input-addon PRIVATE
     ${FCITX5_INCLUDE_DIRS}
     ${PIPEWIRE_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}
-    ${EXTRA_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
     src/addon
 )
 
 target_link_libraries(voice-input-addon PRIVATE
     ${FCITX5_LIBRARIES}
     ${PIPEWIRE_LIBRARIES}
-    ${EXTRA_LIBRARIES}
+    CURL::libcurl
 )
 
 target_compile_definitions(voice-input-addon PRIVATE
     VOICE_INPUT_VERSION="${PROJECT_VERSION}"
 )
 
-if(ENABLE_LLM_SUPPORT)
-    find_package(CURL REQUIRED)
-    target_link_libraries(voice-input-addon PRIVATE CURL::libcurl)
-    target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)
-endif()
-
-if(SHERPA_ONNX_FOUND)
+# ─── Optional: sherpa-onnx local ASR ─────────────────────────────────────────
+if(ENABLE_SHERPA_ONNX AND SHERPA_ONNX_FOUND)
     list(APPEND ADDON_SOURCES src/addon/asr/sherpa_asr.cpp)
     list(APPEND ADDON_HEADERS src/addon/asr/sherpa_asr.h)
-    list(APPEND EXTRA_INCLUDE_DIRS ${SHERPA_ONNX_INCLUDE_DIRS})
-    list(APPEND EXTRA_LIBRARIES ${SHERPA_ONNX_LIBRARIES})
+    target_include_directories(voice-input-addon PRIVATE ${SHERPA_ONNX_INCLUDE_DIRS})
+    target_link_libraries(voice-input-addon PRIVATE ${SHERPA_ONNX_LIBRARIES})
     target_compile_definitions(voice-input-addon PRIVATE ENABLE_SHERPA_ONNX)
-else()
-    message(STATUS "sherpa-onnx not found — ASR engine disabled, capture-only mode")
 endif()
 
-if(ENABLE_CLOUD_ASR)
-    list(APPEND ADDON_SOURCES src/addon/asr/command_engine.cpp)
-    list(APPEND ADDON_HEADERS src/addon/asr/command_engine.h)
-    target_compile_definitions(voice-input-addon PRIVATE ENABLE_CLOUD_ASR)
+if(ENABLE_LLM_SUPPORT)
+    target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)
 endif()
 
 # ─── Install ──────────────────────────────────────────────────────────────────
@@ -122,7 +121,7 @@ endif()
 # ─── Packaging ──────────────────────────────────────────────────────────────
 set(CPACK_PACKAGE_NAME "fcitx5-voice-input")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Fcitx5 voice input addon with local ASR")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Fcitx5 voice input addon")
 set(CPACK_PACKAGE_VENDOR "devcxl")
 set(CPACK_PACKAGE_CONTACT "64475363+devcxl@users.noreply.github.com")
 

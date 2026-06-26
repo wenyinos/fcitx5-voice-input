@@ -10,26 +10,34 @@ namespace fcitx {
  * ASR engine interface.
  *
  * Supports both local (sherpa-onnx) and cloud providers.
- * All implementations must be thread-safe: Start()/Stop() called from
- * main thread, Process() called from ASR thread.
+ * All implementations must be thread-safe: Start()/FeedAudio()/Stop()
+ * follow an online session lifecycle.
  */
 class AsrEngine {
 public:
     struct Config {
-        std::string modelPath;
+        // Common
         std::string modelName;
+
+        // Sherpa-onnx (local)
+        std::string modelPath;
         int numThreads = 4;
+
+        // OpenAI-compatible (cloud)
+        std::string apiEndpoint;
+        std::string apiKey;
+        std::string language = "zh";
     };
 
-    // Result callback — called from ASR thread, caller must dispatch to
-    // main thread via eventLoop().addDeferredEvent().
+    // Result callback — called from worker thread, caller must dispatch
+    // to main thread (e.g. via EventDispatcher).
     using ResultCallback = std::function<void(const std::string& text, bool isFinal)>;
     using ErrorCallback = std::function<void(const std::string& error)>;
 
     virtual ~AsrEngine() = default;
 
-    // Initialize the engine with model/config.
-    // Returns false if initialization fails (e.g. model not found).
+    // Initialize the engine with config.
+    // Returns false if initialization fails.
     virtual bool Init(const Config& config) = 0;
 
     // Start a new recognition session (clean state).
@@ -39,8 +47,8 @@ public:
     // Non-blocking: audio is queued internally.
     virtual void FeedAudio(const float* pcm, size_t frames) = 0;
 
-    // Signal end of input, get final result.
-    // After calling this, Start() must be called again for new session.
+    // Signal end of input, trigger final result.
+    // Non-blocking: processing continues on worker thread.
     virtual void Stop() = 0;
 
     // Unique name for this engine.

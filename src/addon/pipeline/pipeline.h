@@ -50,6 +50,7 @@ public:
     // ── Configuration (thread-safe) ────────────────────────────────────
     void SetConfig(const VoiceInputConfig& config);
     void SetAsrEngine(std::unique_ptr<AsrEngine> engine);
+    bool HasAsrEngine() const { return asrEngine_ != nullptr; }
 
     // ── Callbacks ──────────────────────────────────────────────────────
     void SetStateCallback(StateCallback cb) { stateCb_ = std::move(cb); }

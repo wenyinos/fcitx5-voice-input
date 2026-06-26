@@ -6,6 +6,12 @@
 #include <fcitx/addonmanager.h>
 #include <fcitx/instance.h>
 
+#include "asr/openai_asr.h"
+
+#ifdef ENABLE_SHERPA_ONNX
+#include "asr/sherpa_asr.h"
+#endif
+
 namespace fcitx {
 
 class VoiceInputAddonFactory : public AddonFactory {
@@ -35,7 +41,6 @@ void VoiceInputEngine::activate(const InputMethodEntry& entry,
 
 void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
                                    InputContextEvent& event) {
-    // Stop any active recording
     if (pipeline_->GetState() == Pipeline::State::RECORDING) {
         pipeline_->StopRecording();
     }
@@ -55,7 +60,6 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
             pipeline_->StartRecording();
             activeIc_ = ic;
             keyEvent.filter();
-            return;
         }
         return;
     }
@@ -65,12 +69,9 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
         if (pipeline_->GetState() == Pipeline::State::RECORDING) {
             pipeline_->StopRecording();
             keyEvent.filter();
-            return;
         }
         return;
     }
-
-    return;
 }
 
 void VoiceInputEngine::OnPipelineStateChange(
@@ -80,11 +81,6 @@ void VoiceInputEngine::OnPipelineStateChange(
 }
 
 void VoiceInputEngine::OnAsrResult(const std::string& text) {
-    // This is called from the ASR thread.
-    // Dispatch to main thread via EventDispatcher::schedule().
-    // The IC pointer is captured by value; when the deferred event fires
-    // we verify activeIc_ hasn't been reassigned.
-
     auto* ic = activeIc_;
     if (!ic) return;
 
@@ -96,12 +92,6 @@ void VoiceInputEngine::OnAsrResult(const std::string& text) {
                 ic->commitString(result);
             }
         });
-}
-
-void VoiceInputEngine::CommitText(const std::string& text) {
-    if (activeIc_) {
-        activeIc_->commitString(text);
-    }
 }
 
 void VoiceInputEngine::InitializeIfNeeded() {
@@ -123,24 +113,50 @@ void VoiceInputEngine::InitializeIfNeeded() {
 
     pipeline_->Init(config_);
 
-    // ⚠️ TODO: Create and set real sherpa-onnx ASR engine
-    // This requires sherpa-onnx library to be installed at build time.
-    // For now, pipeline runs capture-only as a stub.
-    //
-    // auto asr = std::make_unique<SherpaAsrEngine>();
-    // AsrEngine::Config asrConfig;
-    // asrConfig.modelPath = config_.modelPath;
-    // asrConfig.modelName = config_.modelName;
-    // asrConfig.numThreads = config_.numThreads;
-    // if (asr->Init(asrConfig)) {
-    //     pipeline_->SetAsrEngine(std::move(asr));
-    // }
+    // Create ASR engine based on backend selection
+    auto asrConfig = AsrEngine::Config{};
+
+    if (config_.asrBackend == "sherpa-onnx") {
+#ifdef ENABLE_SHERPA_ONNX
+        asrConfig.modelPath = config_.modelPath;
+        asrConfig.modelName = config_.modelName;
+        asrConfig.numThreads = config_.numThreads;
+
+        auto asr = std::make_unique<SherpaAsrEngine>();
+        if (asr->Init(asrConfig)) {
+            pipeline_->SetAsrEngine(std::move(asr));
+        } else {
+            FCITX_WARN() << "[voice-input] Sherpa-onnx init failed, "
+                            "falling back to OpenAI-compatible";
+        }
+#else
+        FCITX_WARN() << "[voice-input] asrBackend=sherpa-onnx but "
+                        "ENABLE_SHERPA_ONNX not set, using OpenAI";
+#endif
+    }
+
+    // Default: OpenAI-compatible (also serves as fallback)
+    if (!pipeline_->HasAsrEngine()) {
+        asrConfig.apiEndpoint = config_.openaiEndpoint;
+        asrConfig.apiKey = config_.openaiApiKey;
+        asrConfig.modelName = config_.openaiModel;
+        asrConfig.language = config_.openaiLanguage;
+
+        auto asr = std::make_unique<OpenaiCompatAsrEngine>();
+        if (asr->Init(asrConfig)) {
+            pipeline_->SetAsrEngine(std::move(asr));
+            FCITX_INFO() << "[voice-input] Using OpenAI-compatible ASR: "
+                         << config_.openaiEndpoint
+                         << " model=" << config_.openaiModel;
+        } else {
+            FCITX_WARN() << "[voice-input] OpenAI ASR init failed "
+                            "(no API key?), running capture-only";
+        }
+    }
 }
 
 void VoiceInputEngine::LoadConfig() {
-    // Load from Fcitx config subsystem
-    // For now, use defaults since Fcitx config loading integration
-    // requires the addon config registration in .conf file.
+    // For now, use defaults — Fcitx config loading integration TBD
     config_ = VoiceInputConfig::Defaults();
 }
 

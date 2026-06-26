@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef ENABLE_SHERPA_ONNX
+
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -20,6 +22,8 @@ namespace fcitx {
  * Runs inference on a dedicated thread. Audio is fed via a thread-safe queue.
  * Results are delivered via callbacks (which run on the ASR thread — caller
  * must dispatch to main thread via Fcitx event loop).
+ *
+ * Only compiled when ENABLE_SHERPA_ONNX is defined.
  */
 class SherpaAsrEngine : public AsrEngine {
 public:
@@ -57,3 +61,5 @@ private:
 };
 
 } // namespace fcitx
+
+#endif // ENABLE_SHERPA_ONNX

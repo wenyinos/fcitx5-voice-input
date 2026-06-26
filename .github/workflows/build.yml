@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  SHERPA_ONNX_VERSION: v1.12.39
-  SHERPA_ONNX_DIR: sherpa-onnx-v1.12.39-linux-x64-shared-no-tts
-
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -24,39 +20,8 @@ jobs:
             libfcitx5core-dev \
             libpipewire-0.3-dev libspa-0.2-dev \
             nlohmann-json3-dev \
+            libcurl4-openssl-dev \
             dpkg-dev
-
-      - name: Cache sherpa-onnx C API
-        id: cache-sherpa
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.SHERPA_ONNX_DIR }}
-          key: sherpa-${{ env.SHERPA_ONNX_VERSION }}-shared-no-tts
-
-      - name: Download sherpa-onnx C API
-        if: steps.cache-sherpa.outputs.cache-hit != 'true'
-        run: |
-          wget -qO- \
-            https://github.com/k2-fsa/sherpa-onnx/releases/download/${{ env.SHERPA_ONNX_VERSION }}/${{ env.SHERPA_ONNX_DIR }}.tar.bz2 \
-            | tar -xj
-
-      - name: Setup pkg-config for sherpa-onnx
-        run: |
-          DIR="$PWD/${{ env.SHERPA_ONNX_DIR }}"
-          mkdir -p "$DIR/lib/pkgconfig"
-          cat > "$DIR/lib/pkgconfig/sherpa-onnx.pc" <<EOF
-          prefix=$DIR
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
-
-          Name: sherpa-onnx
-          Description: Sherpa ONNX speech recognition C API
-          Version: ${{ env.SHERPA_ONNX_VERSION }}
-          Libs: -L\${libdir} -lsherpa-onnx-c-api
-          Cflags: -I\${includedir}
-          EOF
-          echo "PKG_CONFIG_PATH=$DIR/lib/pkgconfig:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -80,49 +45,22 @@ jobs:
         run: |
           mkdir -p /tmp/archpkg
 
-          # Source tarball matching PKGBUILD naming
           git archive --prefix=fcitx5-voice-input-0.1.0/ \
             -o /tmp/archpkg/fcitx5-voice-input-0.1.0.tar.gz HEAD
 
           cp aur/PKGBUILD /tmp/archpkg/
 
-          # Build in Arch Linux container
           docker run --rm -v /tmp/archpkg:/build archlinux:latest bash -c "
             set -eux
-
-            # Install build dependencies
             pacman -Syu --noconfirm base-devel cmake pkg-config \
-              fcitx5 pipewire nlohmann-json wget
+              fcitx5 pipewire nlohmann-json curl
 
-            # Download sherpa-onnx (no cache dependency in Arch)
-            wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/${{ env.SHERPA_ONNX_VERSION }}/${{ env.SHERPA_ONNX_DIR }}.tar.bz2
-            tar -xjf ${{ env.SHERPA_ONNX_DIR }}.tar.bz2
-
-            # Create pkg-config file for sherpa-onnx
-            cd ${{ env.SHERPA_ONNX_DIR }}
-            mkdir -p lib/pkgconfig
-            echo 'prefix=/build/${{ env.SHERPA_ONNX_DIR }}' > lib/pkgconfig/sherpa-onnx.pc
-            echo 'exec_prefix=\${prefix}' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'libdir=\${exec_prefix}/lib' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'includedir=\${prefix}/include' >> lib/pkgconfig/sherpa-onnx.pc
-            echo '' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'Name: sherpa-onnx' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'Description: Sherpa ONNX speech recognition C API' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'Version: ${{ env.SHERPA_ONNX_VERSION }}' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'Libs: -L\${libdir} -lsherpa-onnx-c-api' >> lib/pkgconfig/sherpa-onnx.pc
-            echo 'Cflags: -I\${includedir}' >> lib/pkgconfig/sherpa-onnx.pc
-
-            # Build the package as a non-root user
             cd /build
             useradd -m builder
             chown -R builder:builder /build
-            su builder -c ' \
-              cd /build && \
-              PKG_CONFIG_PATH=/build/${{ env.SHERPA_ONNX_DIR }}/lib/pkgconfig \
-                makepkg -f --nodeps --noconfirm'
+            su builder -c 'cd /build && makepkg -f --noconfirm'
           "
 
-          # Collect the built package
           cp /tmp/archpkg/*.pkg.tar.zst . 2>/dev/null || true
           echo "::group::Arch package"
           ls -lh *.pkg.tar.zst 2>/dev/null || echo '(no Arch package)'
