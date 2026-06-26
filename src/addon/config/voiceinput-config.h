@@ -3,16 +3,10 @@
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/option.h>
 #include <fcitx-utils/i18n.h>
-#include <fcitx-utils/key.h>
 
 namespace fcitx {
 
 FCITX_CONFIGURATION(VoiceInputConfig,
-    // Trigger key to activate voice input
-    Option<KeyList> triggerKeys{this, "TriggerKeys",
-                                _("Trigger Keys"),
-                                KeyList{Key("Control+Alt+v")}};
-
     // ASR backend selection: "openai" or "sherpa"
     Option<std::string> asrBackend{this, "ASRBackend",
                                    _("ASR Backend"),
