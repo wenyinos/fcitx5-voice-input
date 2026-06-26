@@ -42,6 +42,8 @@ public:
 
 private:
     static void OnProcess(void* userdata);
+    static void OnStateChanged(void* userdata, pw_stream_state oldState,
+                               pw_stream_state state, const char* error);
     void OnProcessImpl();
     void Cleanup(bool stopLoop);
 

@@ -71,6 +71,7 @@ bool PipeWireCapture::Start() {
     static const struct pw_stream_events stream_events = [] {
         struct pw_stream_events events{};
         events.version = PW_VERSION_STREAM_EVENTS;
+        events.state_changed = &PipeWireCapture::OnStateChanged;
         events.process = &PipeWireCapture::OnProcess;
         return events;
     }();
@@ -154,6 +155,14 @@ void PipeWireCapture::Cleanup(bool stopLoop) {
 void PipeWireCapture::OnProcess(void* userdata) {
     auto* self = static_cast<PipeWireCapture*>(userdata);
     self->OnProcessImpl();
+}
+
+void PipeWireCapture::OnStateChanged(void*, pw_stream_state oldState,
+                                     pw_stream_state state, const char* error) {
+    FCITX_INFO() << "[voice-input:pw] Stream state changed: "
+                 << pw_stream_state_as_string(oldState) << " -> "
+                 << pw_stream_state_as_string(state)
+                 << (error ? " error=" : "") << (error ? error : "");
 }
 
 void PipeWireCapture::OnProcessImpl() {
