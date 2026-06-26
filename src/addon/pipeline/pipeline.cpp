@@ -22,7 +22,7 @@ Pipeline::~Pipeline() {
 
 void Pipeline::Init(const VoiceInputConfig &config) {
     config_ = config;
-    vad_->SetVadThreshold(config_.vadThreshold.value());
+    vad_->SetVadThreshold(config_.vadThreshold.value() / 100.0f);
     vad_->SetSilenceMs(config_.silenceThresholdMs.value());
 
     FCITX_INFO() << "[voice-input] Pipeline initialized";
@@ -31,7 +31,7 @@ void Pipeline::Init(const VoiceInputConfig &config) {
 void Pipeline::SetConfig(const VoiceInputConfig &config) {
     std::lock_guard<std::mutex> lock(stateLock_);
     config_ = config;
-    vad_->SetVadThreshold(config_.vadThreshold.value());
+    vad_->SetVadThreshold(config_.vadThreshold.value() / 100.0f);
     vad_->SetSilenceMs(config_.silenceThresholdMs.value());
 }
 
