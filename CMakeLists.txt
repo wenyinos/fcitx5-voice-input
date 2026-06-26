@@ -79,6 +79,9 @@ set(ADDON_HEADERS
 # ─── Library ──────────────────────────────────────────────────────────────────
 add_library(voice-input-addon MODULE ${ADDON_SOURCES} ${ADDON_HEADERS})
 
+# fcitx5 resolves addon .so as <Library>.so (no lib prefix)
+set_target_properties(voice-input-addon PROPERTIES PREFIX "")
+
 target_include_directories(voice-input-addon PRIVATE
     ${FCITX5_INCLUDE_DIRS}
     ${PIPEWIRE_INCLUDE_DIRS}
