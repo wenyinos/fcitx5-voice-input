@@ -1,5 +1,6 @@
 #include "pipeline.h"
 
+#include <fcitx-utils/log.h>
 #include <cstring>
 #include <iostream>
 #include <chrono>
@@ -39,6 +40,8 @@ void Pipeline::Init(const VoiceInputConfig& config) {
 void Pipeline::StartRecording() {
     if (state_.load() != State::IDLE) return;
 
+    FCITX_INFO() << "[voice-input] Pipeline::StartRecording";
+
     // Clear previous session data
     sessionAudio_.clear();
     sessionAudio_.reserve(kSessionReserveSamples);
@@ -62,8 +65,12 @@ void Pipeline::StartRecording() {
 void Pipeline::StopRecording() {
     State expected = State::RECORDING;
     if (!state_.compare_exchange_strong(expected, State::PROCESSING_ASR)) {
+        FCITX_WARN() << "[voice-input] StopRecording: not recording (state="
+                     << static_cast<int>(state_.load()) << ")";
         return;  // not recording
     }
+
+    FCITX_INFO() << "[voice-input] StopRecording";
 
     // Wait for capture thread to finish
     if (captureThread_ && captureThread_->joinable()) {

@@ -79,19 +79,24 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry &entry,
     bool matched = std::ranges::any_of(
         triggerKeys, [&key](const Key &tk) { return key == tk; });
 
+    FCITX_INFO() << "[voice-input] keyEvent sym=" << key.sym()
+                 << " isRelease=" << keyEvent.isRelease()
+                 << " matched=" << matched
+                 << " triggerKeys.size=" << triggerKeys.size();
+
     if (!matched)
         return;
 
     keyEvent.filter();
 
     if (!keyEvent.isRelease()) {
-        // Key pressed → start recording
         if (pipeline_->GetState() == Pipeline::State::IDLE) {
+            FCITX_INFO() << "[voice-input] StartRecording";
             pipeline_->StartRecording();
         }
     } else {
-        // Key released → stop recording
         if (pipeline_->GetState() == Pipeline::State::RECORDING) {
+            FCITX_INFO() << "[voice-input] StopRecording";
             pipeline_->StopRecording();
         }
     }
