@@ -1,10 +1,12 @@
-#include "engine.h"
+#include <algorithm>
 
-#include <fcitx-utils/log.h>
 #include <fcitx-utils/eventdispatcher.h>
-#include <fcitx/addonloader.h>
+#include <fcitx-utils/log.h>
+#include <fcitx-utils/standardpath.h>
 #include <fcitx/addonmanager.h>
 #include <fcitx/instance.h>
+
+#include "engine.h"
 
 #include "asr/openai_asr.h"
 
@@ -14,91 +16,92 @@
 
 namespace fcitx {
 
-class VoiceInputAddonFactory : public AddonFactory {
-public:
-    AddonInstance* create(AddonManager* manager) override {
-        return new VoiceInputEngine(manager->instance());
-    }
-};
-FCITX_ADDON_FACTORY(VoiceInputAddonFactory);
-
-VoiceInputEngine::VoiceInputEngine(Instance* instance)
-    : instance_(instance)
-    , pipeline_(std::make_unique<Pipeline>())
-{
+VoiceInputEngine::VoiceInputEngine(Instance *instance)
+    : instance_(instance), pipeline_(std::make_unique<Pipeline>()) {
     eventDispatcher_.attach(&instance_->eventLoop());
+    reloadConfig();
 }
 
-VoiceInputEngine::~VoiceInputEngine() {
-    pipeline_->Abort();
-}
+VoiceInputEngine::~VoiceInputEngine() { pipeline_->Abort(); }
 
-void VoiceInputEngine::activate(const InputMethodEntry& entry,
-                                 InputContextEvent& event) {
+void VoiceInputEngine::activate(const InputMethodEntry &entry,
+                                InputContextEvent &event) {
+    FCITX_UNUSED(entry);
+    FCITX_UNUSED(event);
     InitializeIfNeeded();
     activeIc_ = event.inputContext();
 }
 
-void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
-                                   InputContextEvent& event) {
+void VoiceInputEngine::deactivate(const InputMethodEntry &entry,
+                                  InputContextEvent &event) {
+    FCITX_UNUSED(entry);
+    FCITX_UNUSED(event);
     if (pipeline_->GetState() == Pipeline::State::RECORDING) {
         pipeline_->StopRecording();
     }
     activeIc_ = nullptr;
 }
 
-void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
-                                 KeyEvent& keyEvent) {
-    auto* ic = keyEvent.inputContext();
-    if (!ic) return;
+void VoiceInputEngine::keyEvent(const InputMethodEntry &entry,
+                                KeyEvent &keyEvent) {
+    FCITX_UNUSED(entry);
+    auto *ic = keyEvent.inputContext();
+    if (!ic)
+        return;
 
-    Key triggerKey = config_.triggerKey;
+    const auto &triggerKeys = config_.triggerKeys.value();
+    const auto &key = keyEvent.key();
 
-    // Trigger key pressed → start recording
-    if (keyEvent.key() == triggerKey && !keyEvent.isRelease()) {
+    // Check if any trigger key matches
+    bool matched = std::ranges::any_of(
+        triggerKeys, [&key](const Key &tk) { return key == tk; });
+
+    if (!matched)
+        return;
+
+    keyEvent.filter();
+
+    if (!keyEvent.isRelease()) {
+        // Key pressed → start recording
         if (pipeline_->GetState() == Pipeline::State::IDLE) {
             pipeline_->StartRecording();
             activeIc_ = ic;
-            keyEvent.filter();
         }
-        return;
-    }
-
-    // Trigger key released → stop recording
-    if (keyEvent.key() == triggerKey && keyEvent.isRelease()) {
+    } else {
+        // Key released → stop recording
         if (pipeline_->GetState() == Pipeline::State::RECORDING) {
             pipeline_->StopRecording();
-            keyEvent.filter();
         }
-        return;
     }
 }
 
-void VoiceInputEngine::OnPipelineStateChange(
-    Pipeline::State oldState, Pipeline::State newState) {
-    FCITX_DEBUG() << "[voice-input] State: "
-                  << pipeline_->StateName();
+void VoiceInputEngine::OnPipelineStateChange(Pipeline::State oldState,
+                                             Pipeline::State newState) {
+    FCITX_UNUSED(oldState);
+    FCITX_DEBUG() << "[voice-input] State: " << pipeline_->StateName();
 }
 
-void VoiceInputEngine::OnAsrResult(const std::string& text) {
-    auto* ic = activeIc_;
-    if (!ic) return;
+void VoiceInputEngine::OnAsrResult(const std::string &text) {
+    auto *ic = activeIc_;
+    if (!ic)
+        return;
 
-    std::string result = text;
+    eventDispatcher_.schedule([this, ic, text]() {
+        if (activeIc_ == ic) {
+            ic->commitString(text);
+        }
+    });
+}
 
-    eventDispatcher_.schedule(
-        [this, ic, result]() {
-            if (activeIc_ == ic) {
-                ic->commitString(result);
-            }
-        });
+void VoiceInputEngine::LoadConfig() {
+    // Load from fcitx5 standard path (~/.config/fcitx5/conf/voiceinput.conf)
+    config_.load();
 }
 
 void VoiceInputEngine::InitializeIfNeeded() {
-    if (initialized_) return;
+    if (initialized_)
+        return;
     initialized_ = true;
-
-    LoadConfig();
 
     // Setup pipeline callbacks
     pipeline_->SetStateCallback(
@@ -107,20 +110,18 @@ void VoiceInputEngine::InitializeIfNeeded() {
         });
 
     pipeline_->SetResultCallback(
-        [this](const std::string& text) {
-            OnAsrResult(text);
-        });
+        [this](const std::string &text) { OnAsrResult(text); });
 
     pipeline_->Init(config_);
 
     // Create ASR engine based on backend selection
     auto asrConfig = AsrEngine::Config{};
 
-    if (config_.asrBackend == "sherpa-onnx") {
+    if (config_.asrBackend.value() == "sherpa-onnx") {
 #ifdef ENABLE_SHERPA_ONNX
-        asrConfig.modelPath = config_.modelPath;
-        asrConfig.modelName = config_.modelName;
-        asrConfig.numThreads = config_.numThreads;
+        asrConfig.modelPath = config_.modelPath.value();
+        asrConfig.modelName = config_.modelName.value();
+        asrConfig.numThreads = config_.numThreads.value();
 
         auto asr = std::make_unique<SherpaAsrEngine>();
         if (asr->Init(asrConfig)) {
@@ -137,17 +138,17 @@ void VoiceInputEngine::InitializeIfNeeded() {
 
     // Default: OpenAI-compatible (also serves as fallback)
     if (!pipeline_->HasAsrEngine()) {
-        asrConfig.apiEndpoint = config_.openaiEndpoint;
-        asrConfig.apiKey = config_.openaiApiKey;
-        asrConfig.modelName = config_.openaiModel;
-        asrConfig.language = config_.openaiLanguage;
+        asrConfig.apiEndpoint = config_.openaiEndpoint.value();
+        asrConfig.apiKey = config_.openaiApiKey.value();
+        asrConfig.modelName = config_.openaiModel.value();
+        asrConfig.language = config_.openaiLanguage.value();
 
         auto asr = std::make_unique<OpenaiCompatAsrEngine>();
         if (asr->Init(asrConfig)) {
             pipeline_->SetAsrEngine(std::move(asr));
             FCITX_INFO() << "[voice-input] Using OpenAI-compatible ASR: "
-                         << config_.openaiEndpoint
-                         << " model=" << config_.openaiModel;
+                         << config_.openaiEndpoint.value()
+                         << " model=" << config_.openaiModel.value();
         } else {
             FCITX_WARN() << "[voice-input] OpenAI ASR init failed "
                             "(no API key?), running capture-only";
@@ -155,9 +156,13 @@ void VoiceInputEngine::InitializeIfNeeded() {
     }
 }
 
-void VoiceInputEngine::LoadConfig() {
-    // For now, use defaults — Fcitx config loading integration TBD
-    config_ = VoiceInputConfig::Defaults();
-}
-
 } // namespace fcitx
+
+// ── Fcitx5 addon factory ───────────────────────────────────────────────
+class VoiceInputAddonFactory : public AddonFactory {
+public:
+    AddonInstance *create(AddonManager *manager) override {
+        return new VoiceInputEngine(manager->instance());
+    }
+};
+FCITX_ADDON_FACTORY_V2(voiceinput, VoiceInputAddonFactory);

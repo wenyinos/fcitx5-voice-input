@@ -57,7 +57,6 @@ endif()
 # ─── Sources ──────────────────────────────────────────────────────────────────
 set(ADDON_SOURCES
     src/addon/engine.cpp
-    src/addon/config/config.cpp
     src/addon/capture/pipewire_capture.cpp
     src/addon/vad/vad.cpp
     src/addon/pipeline/pipeline.cpp
@@ -67,6 +66,7 @@ set(ADDON_SOURCES
 set(ADDON_HEADERS
     src/addon/engine.h
     src/addon/config/config.h
+    src/addon/config/voiceinput-config.h
     src/addon/capture/pipewire_capture.h
     src/addon/vad/vad.h
     src/addon/asr/asr_engine.h
