@@ -98,12 +98,20 @@ if(ENABLE_LLM_SUPPORT)
     target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)
 endif()
 
+# ─── Addon Config ──────────────────────────────────────────────────────────────
+# Generate addon .conf from .conf.in template (substitutes @PROJECT_VERSION@)
+configure_file(
+    src/addon/voiceinput.conf.in
+    ${CMAKE_BINARY_DIR}/share/fcitx5/addon/voiceinput.conf
+    @ONLY
+)
+
 # ─── Install ──────────────────────────────────────────────────────────────────
 install(TARGETS voice-input-addon
     LIBRARY DESTINATION lib/fcitx5
 )
 
-install(FILES src/addon/config/voice-input-addon.conf
+install(FILES ${CMAKE_BINARY_DIR}/share/fcitx5/addon/voiceinput.conf
     DESTINATION share/fcitx5/addon
 )
 
