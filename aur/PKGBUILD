@@ -12,7 +12,9 @@ depends=(
     'fcitx5'
     'pipewire'
     'nlohmann-json'
-    'sherpa-onnx'
+)
+optdepends=(
+    'sherpa-onnx: ASR engine for voice recognition (capture-only mode without it)'
 )
 makedepends=('cmake' 'pkg-config')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
