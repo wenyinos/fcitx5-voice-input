@@ -158,6 +158,8 @@ void VoiceInputEngine::CommitText(const std::string &text) {
 
 void VoiceInputEngine::SetUIStatus(const std::string &text, bool instant) {
     auto *ic = activeIc_;
+    FCITX_INFO() << "[voice-input] SetUIStatus text='" << text
+                 << "' instant=" << instant << " ic=" << (void*)ic;
     if (!ic)
         return;
 
@@ -172,16 +174,20 @@ void VoiceInputEngine::SetUIStatus(const std::string &text, bool instant) {
     } else {
         // Called from main thread already — update directly
         ic->inputPanel().setClientPreedit(Text(text));
+        ic->inputPanel().setAuxUp(Text(text));
         ic->updatePreedit();
+        ic->updateUserInterface(UserInterfaceComponent::InputPanel);
     }
 }
 
 void VoiceInputEngine::ClearUI() {
     auto *ic = activeIc_;
+    FCITX_INFO() << "[voice-input] ClearUI ic=" << fmt::ptr(ic);
     if (!ic)
         return;
     ic->inputPanel().reset();
     ic->updatePreedit();
+    ic->updateUserInterface(UserInterfaceComponent::InputPanel);
 }
 
 void VoiceInputEngine::InitializeIfNeeded() {
