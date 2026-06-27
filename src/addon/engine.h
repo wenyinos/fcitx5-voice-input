@@ -3,7 +3,7 @@
 #include <atomic>
 
 #include <fcitx-utils/eventdispatcher.h>
-#include <fcitx-utils/eventloopinterface.h>
+#include <fcitx-utils/event.h>
 #include <fcitx/event.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputmethodengine.h>
