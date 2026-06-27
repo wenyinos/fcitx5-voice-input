@@ -1,59 +1,147 @@
+<div align="center">
+
 # fcitx5-voice-input
 
-[English](#english) | [中文](#中文)
+<p>
+  <a href="https://github.com/devcxl/fcitx5-voice-input/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/fcitx5-voice-input/build.yml?branch=main&logo=github&label=build" alt="Build"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-LGPL%20v3-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/platform-Linux-important" alt="Platform">
+  <img src="https://img.shields.io/badge/fcitx5-%3E%3D5.1.19-blueviolet" alt="Fcitx5">
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus" alt="C++20">
+</p>
+
+[中文](README.zh-CN.md)
 
 ---
 
-## English
+</div>
 
-**fcitx5-voice-input** is a Fcitx5 addon for voice input. Captures audio via PulseAudio (or PipeWire fallback), detects speech with Silero ONNX VAD, and transcribes via OpenAI-compatible API.
+**fcitx5-voice-input** is a Fcitx5 addon for voice input. Captures audio via PulseAudio (or PipeWire fallback), detects speech segments with Silero ONNX VAD, and transcribes via OpenAI-compatible API.
 
-**Features**
-- Speaker-independent Chinese speech recognition
-- Silero ONNX VAD for automatic speech segmentation
-- Queue-based pipeline: Capture → VAD Worker → ASR Worker → Main Thread
-- Simple configuration via `fcitx5-configtool`
+## Features
 
-**Dependencies** `fcitx5`, `libpulse-simple`, `libpipewire-0.3`, `jsoncpp`, `libcurl`, `onnxruntime`
+- Voice input (OpenAI Whisper API / compatible services)
+- Silero ONNX VAD for automatic speech segmentation (no push-to-talk required)
+- Queue-based pipeline: Audio Capture → VAD → ASR → Main Thread commit
+- Graphical configuration via `fcitx5-configtool`
+- Optional sherpa-onnx offline local ASR
+- Smart delayed stop on window switching
 
-After cloning:
+## Usage
+
+### 1. Installation
+
+#### Arch Linux (AUR)
+
 ```bash
-git submodule update --init --recursive
+yay -S fcitx5-voice-input
 ```
 
-**Build**
+#### Build from source
+
+See [Build](#build) below.
+
+### 2. Configuration
+
+After installation, open `fcitx5-configtool`, find **Voice Input** in the Input Method list and add it.
+
+Then open the Addon config for **VoiceInput** and set:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `ASRBackend` | ASR backend (`openai` / `sherpa`) | `openai` |
+| `OpenAIEndpoint` | API endpoint URL | `https://api.openai.com/v1` |
+| `OpenAIApiKey` | API Key | **(required)** |
+| `OpenAIModel` | Model name | `whisper-1` |
+| `OpenAILanguage` | Output language, empty for auto | (empty) |
+| `AudioSource` | Input device, empty for auto | (empty) |
+| `VADThreshold` | VAD sensitivity (0-100), higher = less sensitive | `50` |
+| `SilenceThresholdMs` | Silence duration to end utterance (ms) | `800` |
+
+**API Key**: Fill in your API Key in `OpenAIApiKey`. Compatible with any OpenAI-format service:
+
+- [OpenAI](https://platform.openai.com/) — `https://api.openai.com/v1`
+- [Groq](https://console.groq.com/) — `https://api.groq.com/openai/v1`
+- [SiliconFlow](https://cloud.siliconflow.com) — `https://api.siliconflow.com/v1`
+
+### 3. How to Use
+
+1. Switch to **Voice Input** IME
+2. Start speaking — VAD automatically detects speech and records
+3. Stop speaking (default 800ms silence timeout) — audio is sent for ASR
+4. Recognition result is committed automatically
+5. Stay in Voice Input mode and continue speaking for consecutive recognition
+
+When switching windows, the plugin delays stop by 200ms. Quick switch-back cancels the stop, avoiding unnecessary restarts.
+
+## Build
+
+### Dependencies
+
+- `fcitx5` — Input method framework
+- `libpulse-simple` — PulseAudio capture (preferred)
+- `libpipewire-0.3` — PipeWire capture (fallback)
+- `jsoncpp` — JSON parsing
+- `libcurl` — HTTP client (required for OpenAI ASR)
+- `onnxruntime` — Silero VAD ONNX Runtime
+
+> **Arch Linux:** `sudo pacman -S fcitx5 pulseaudio pipewire jsoncpp curl onnxruntime-cpu`
+>
+> **Debian/Ubuntu:** `sudo apt install fcitx5 libpulse-dev libpipewire-0.3-dev libjsoncpp-dev libcurl4-openssl-dev libonnxruntime-dev`
+
+### Build Steps
+
 ```bash
+# Clone and init submodules (for Silero VAD model)
+git clone https://github.com/devcxl/fcitx5-voice-input.git
+cd fcitx5-voice-input
+git submodule update --init --recursive
+
+# Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+
+# Build
 cmake --build build -j"$(nproc)"
+
+# Install
 sudo cmake --install build --prefix /usr
 ```
 
-**ASR Backends** OpenAI-compatible API (Whisper) — use with Groq, OpenAI, DeepSeek, etc.
+### CMake Options
 
----
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ENABLE_SHERPA_ONNX` | `OFF` | Enable sherpa-onnx local ASR (requires sherpa-onnx) |
+| `ENABLE_LLM_SUPPORT` | `OFF` | Enable LLM post-processing (compile macro only) |
+| `BUILD_TESTS` | `OFF` | Build tests |
+| `ONNXRUNTIME_ROOT` | — | Custom ONNX Runtime install path |
 
-## 中文
+Example — enable sherpa-onnx:
 
-**fcitx5-voice-input** 是一个 Fcitx5 语音输入插件。通过 PulseAudio（或 PipeWire fallback）捕获音频，使用 Silero ONNX VAD 检测人声，通过 OpenAI 兼容 API 进行语音识别。
-
-**功能**
-- 中文语音输入
-- Silero ONNX VAD 自动分段录音
-- 队列管道架构：采集 → VAD Worker → ASR Worker → 主线程
-- 通过 `fcitx5-configtool` 简单配置
-
-**依赖** `fcitx5`, `libpulse-simple`, `libpipewire-0.3`, `jsoncpp`, `libcurl`, `onnxruntime`
-
-克隆后：
 ```bash
-git submodule update --init --recursive
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DENABLE_SHERPA_ONNX=ON
 ```
 
-**构建**
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build build -j"$(nproc)"
-sudo cmake --install build --prefix /usr
+## Notes
+
+- **API Key Security**: API key is stored in plain text in `~/.config/fcitx5/conf/voiceinput.conf`. Ensure proper file permissions
+- **Network Required**: Default OpenAI backend requires internet. For offline use, build with `-DENABLE_SHERPA_ONNX=ON` and install a sherpa-onnx model
+- **Audio Device**: Auto-selects system default input. To specify a device, choose from the `AudioSource` dropdown. Only input sources are listed (no Monitor sources)
+- **VAD Model**: The Silero VAD model is distributed via git submodule (`third_party/silero-vad/`) and copied to the install directory at build time. Run `git submodule update --init --recursive` before building
+- **PipeWire Users**: The PulseAudio backend works fine under pipewire-pulse. Native PipeWire is only used as fallback when PulseAudio is completely unavailable
+- **Sherpa-onnx Users**: Currently optional. Chinese recognition accuracy is lower than cloud Whisper. You need to download model files manually
+- **Window Switching**: A 200ms delayed stop prevents unnecessary restarts on quick window switches. Long inactivity will stop the pipeline
+
+## Architecture Overview
+
+```
+Audio Capture Thread → FrameQueue → VAD Worker Thread → UtteranceQueue → ASR Worker Thread → ResultQueue → Main Thread Poll → commitString
 ```
 
-**ASR 后端** OpenAI 兼容 API（Whisper）— 可搭配 Groq、OpenAI、DeepSeek 等使用
+Three worker threads + main thread, connected by `ThreadSafeQueue`. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+
+## License
+
+GNU Lesser General Public License v3.0

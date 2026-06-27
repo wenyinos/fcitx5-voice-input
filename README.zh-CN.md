@@ -1,0 +1,147 @@
+<div align="center">
+
+# fcitx5-voice-input
+
+<p>
+  <a href="https://github.com/devcxl/fcitx5-voice-input/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/fcitx5-voice-input/build.yml?branch=main&logo=github&label=build" alt="Build"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-LGPL%20v3-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/platform-Linux-important" alt="Platform">
+  <img src="https://img.shields.io/badge/fcitx5-%3E%3D5.1.19-blueviolet" alt="Fcitx5">
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus" alt="C++20">
+</p>
+
+[English](README.md) | **中文**
+
+---
+
+</div>
+
+**fcitx5-voice-input** 是一个 Fcitx5 语音输入插件。通过 PulseAudio（或 PipeWire fallback）捕获音频，使用 Silero ONNX VAD 检测人声分段，通过 OpenAI 兼容 API 进行语音识别。
+
+## 功能
+
+- 中文语音输入（OpenAI Whisper API / 兼容服务）
+- Silero ONNX VAD 自动分段录音（无需手动按键控制开始结束）
+- 队列管道架构：音频采集 → VAD 分段 → ASR 识别 → 主线程上屏
+- 通过 `fcitx5-configtool` 图形化配置
+- 可选 sherpa-onnx 本地离线识别
+- 窗口快速切换自动延迟停止，防止误停
+
+## 使用
+
+### 1. 安装
+
+#### Arch Linux (AUR)
+
+```bash
+yay -S fcitx5-voice-input
+```
+
+#### 手动编译安装
+
+见下方 [编译构建](#编译构建)。
+
+### 2. 配置
+
+安装后，打开 `fcitx5-configtool`，在 Input Method 列表中找到 **Voice Input** 并添加到输入法列表。
+
+然后在 Addon 配置中找到 **VoiceInput**，配置以下关键项：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `ASRBackend` | ASR 后端 (`openai` / `sherpa`) | `openai` |
+| `OpenAIEndpoint` | API 地址 | `https://api.openai.com/v1` |
+| `OpenAIApiKey` | API Key | **（必填）** |
+| `OpenAIModel` | 模型名 | `whisper-1` |
+| `OpenAILanguage` | 输出语言，留空自动检测 | （空） |
+| `AudioSource` | 音频输入设备，留空自动选择 | （空） |
+| `VADThreshold` | VAD 灵敏度 (0-100)，越高越不易触发 | `50` |
+| `SilenceThresholdMs` | 静音多久结束说话 (ms) | `800` |
+
+**API Key 配置**：在 `OpenAIApiKey` 中填入你的 API Key。支持所有 OpenAI 兼容服务，如：
+
+- [OpenAI](https://platform.openai.com/) — `https://api.openai.com/v1`
+- [Groq](https://console.groq.com/) — `https://api.groq.com/openai/v1`
+- [硅基流动 (SiliconFlow)](https://siliconflow.cn/) — `https://api.siliconflow.cn/v1`
+
+### 3. 使用
+
+1. 切换到 **Voice Input** 输入法
+2. 开始说话，VAD 自动检测人声并录音
+3. 停止说话（默认 800ms 静音超时），自动发送 ASR 识别
+4. 识别结果自动上屏
+5. 保持语音输入模式，继续说话可连续识别
+
+切换窗口时插件会自动延迟 200ms 停止，快速切回会取消停止，避免不必要的重启。
+
+## 编译构建
+
+### 依赖
+
+- `fcitx5` — 输入法框架
+- `libpulse-simple` — PulseAudio 音频捕获（优先）
+- `libpipewire-0.3` — PipeWire 音频捕获（fallback）
+- `jsoncpp` — JSON 解析
+- `libcurl` — HTTP 客户端（OpenAI ASR 必需）
+- `onnxruntime` — Silero VAD ONNX Runtime
+
+> **Arch Linux:** `sudo pacman -S fcitx5 pulseaudio pipewire jsoncpp curl onnxruntime-cpu`
+>
+> **Debian/Ubuntu:** `sudo apt install fcitx5 libpulse-dev libpipewire-0.3-dev libjsoncpp-dev libcurl4-openssl-dev libonnxruntime-dev`
+
+### 编译
+
+```bash
+# 克隆并初始化子模块（获取 Silero VAD 模型）
+git clone https://github.com/devcxl/fcitx5-voice-input.git
+cd fcitx5-voice-input
+git submodule update --init --recursive
+
+# 配置
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+
+# 编译
+cmake --build build -j"$(nproc)"
+
+# 安装
+sudo cmake --install build --prefix /usr
+```
+
+### CMake 选项
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `ENABLE_SHERPA_ONNX` | `OFF` | 启用 sherpa-onnx 本地 ASR（需安装 sherpa-onnx） |
+| `ENABLE_LLM_SUPPORT` | `OFF` | 启用 LLM 后处理支持（仅编译宏） |
+| `BUILD_TESTS` | `OFF` | 构建测试 |
+| `ONNXRUNTIME_ROOT` | — | ONNX Runtime 自定义安装路径 |
+
+示例 — 启用 sherpa-onnx：
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DENABLE_SHERPA_ONNX=ON
+```
+
+## 注意事项
+
+- **API Key 安全**：API Key 明文存储在 fcitx5 配置文件中（`~/.config/fcitx5/conf/voiceinput.conf`），请注意文件权限
+- **网络要求**：默认 OpenAI 后端需要网络连接。如需离线使用，编译时启用 `ENABLE_SHERPA_ONNX=ON` 并安装 sherpa-onnx 模型
+- **音频设备**：默认自动选择系统音频输入设备。如需指定，在 `AudioSource` 下拉框中选择。仅支持输入源（Source），不支持 Monitor 源
+- **VAD 模型**：Silero VAD 模型通过 git submodule 分发（`third_party/silero-vad/`），编译时自动复制到安装目录。构建前务必执行 `git submodule update --init --recursive`
+- **PipeWire 用户**：PulseAudio 后端也能在 pipewire-pulse 下正常工作，仅在 PulseAudio 完全不可用时 fallback 到 PipeWire 直连
+- **Sherpa-onnx 用户**：当前版本 sherpa-onnx 为可选项，中文识别准确率低于云端 Whisper。需自行下载模型文件并配置路径
+- **窗口切换**：快速切换窗口时插件使用延迟停止机制（200ms），不会频繁重启流水线。长时间切出后会自动停止
+
+## 架构简介
+
+```
+音频捕获线程 → FrameQueue → VAD Worker 线程 → UtteranceQueue → ASR Worker 线程 → ResultQueue → 主线程轮询 → commitString
+```
+
+三个工作线程 + 主线程，通过 `ThreadSafeQueue` 连接各阶段。详见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+## 许可证
+
+GNU Lesser General Public License v3.0
