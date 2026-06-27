@@ -16,9 +16,13 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/build
+      - uses: ./.github/actions/aur
 
       - uses: actions/upload-artifact@v4
         with:
           name: packages
-          path: "*.deb"
+          path: |
+            *.deb
+            dist/aur/*.tar.gz
+            dist/aur/PKGBUILD
           if-no-files-found: warn
