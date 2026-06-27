@@ -9,7 +9,7 @@ namespace fcitx {
 /**
  * ASR engine interface.
  *
- * Supports both local (sherpa-onnx) and cloud providers.
+ * Supports cloud providers via OpenAI-compatible API.
  * All implementations must be thread-safe: Start()/FeedAudio()/Stop()
  * follow an online session lifecycle.
  */

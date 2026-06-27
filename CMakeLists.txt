@@ -11,7 +11,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # ─── Options ─────────────────────────────────────────────────────────────────
-option(ENABLE_SHERPA_ONNX "Enable local ASR via sherpa-onnx" OFF)
 option(ENABLE_LLM_SUPPORT "Enable LLM post-processing (libcurl)" OFF)
 option(BUILD_TESTS "Build unit tests" OFF)
 set(ONNXRUNTIME_ROOT "" CACHE PATH "Path to an ONNX Runtime installation")
@@ -94,14 +93,6 @@ endif()
 set(VOICE_INPUT_MODEL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/fcitx5/voice-input/models")
 message(STATUS "Silero VAD enabled with model: ${SILERO_VAD_MODEL_SOURCE}")
 
-# sherpa-onnx local ASR (optional)
-if(ENABLE_SHERPA_ONNX)
-    pkg_check_modules(SHERPA_ONNX sherpa-onnx)
-    if(NOT SHERPA_ONNX_FOUND)
-        message(FATAL_ERROR "ENABLE_SHERPA_ONNX=ON but sherpa-onnx not found via pkg-config")
-    endif()
-endif()
-
 # ─── Sources ──────────────────────────────────────────────────────────────────
 set(ADDON_SOURCES
     src/addon/engine.cpp
@@ -182,17 +173,6 @@ foreach(PO_FILE ${PO_FILES})
 endforeach()
 add_custom_target(translations ALL DEPENDS ${MO_FILES})
 add_dependencies(voice-input-addon translations)
-
-# ─── Optional: sherpa-onnx local ASR ─────────────────────────────────────────
-if(ENABLE_SHERPA_ONNX AND SHERPA_ONNX_FOUND)
-    target_sources(voice-input-addon PRIVATE
-        src/addon/asr/sherpa_asr.cpp
-        src/addon/asr/sherpa_asr.h
-    )
-    target_include_directories(voice-input-addon PRIVATE ${SHERPA_ONNX_INCLUDE_DIRS})
-    target_link_libraries(voice-input-addon PRIVATE ${SHERPA_ONNX_LIBRARIES})
-    target_compile_definitions(voice-input-addon PRIVATE ENABLE_SHERPA_ONNX)
-endif()
 
 if(ENABLE_LLM_SUPPORT)
     target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)

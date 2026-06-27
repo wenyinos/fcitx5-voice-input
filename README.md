@@ -22,20 +22,13 @@
 
 - Voice input (OpenAI Whisper API / compatible services)
 - Silero ONNX VAD for automatic speech segmentation (no push-to-talk required)
-- Queue-based pipeline: Audio Capture → VAD → ASR → Main Thread commit
+- Queue-based pipeline: Audio Capture → VAD → ASR → EventDispatcher → commit
 - Graphical configuration via `fcitx5-configtool`
-- Optional sherpa-onnx offline local ASR
 - Smart delayed stop on window switching
 
 ## Usage
 
 ### 1. Installation
-
-#### Arch Linux (AUR)
-
-```bash
-yay -S fcitx5-voice-input
-```
 
 #### Build from source
 
@@ -49,7 +42,7 @@ Then open the Addon config for **VoiceInput** and set:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `ASRBackend` | ASR backend (`openai` / `sherpa`) | `openai` |
+| `ASRBackend` | ASR backend | `openai` |
 | `OpenAIEndpoint` | API endpoint URL | `https://api.openai.com/v1` |
 | `OpenAIApiKey` | API Key | **(required)** |
 | `OpenAIModel` | Model name | `whisper-1` |
@@ -111,33 +104,25 @@ sudo cmake --install build --prefix /usr
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `ENABLE_SHERPA_ONNX` | `OFF` | Enable sherpa-onnx local ASR (requires sherpa-onnx) |
 | `ENABLE_LLM_SUPPORT` | `OFF` | Enable LLM post-processing (compile macro only) |
 | `BUILD_TESTS` | `OFF` | Build tests |
 | `ONNXRUNTIME_ROOT` | — | Custom ONNX Runtime install path |
 
-Example — enable sherpa-onnx:
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/usr \
-  -DENABLE_SHERPA_ONNX=ON
-```
 
 ## Notes
 
 - **API Key Security**: API key is stored in plain text in `~/.config/fcitx5/conf/voiceinput.conf`. Ensure proper file permissions
-- **Network Required**: Default OpenAI backend requires internet. For offline use, build with `-DENABLE_SHERPA_ONNX=ON` and install a sherpa-onnx model
+- **Network Required**: OpenAI backend requires internet. Local ASR can be added via the AsrEngine interface
 - **Audio Device**: Auto-selects system default input. To specify a device, choose from the `AudioSource` dropdown. Only input sources are listed (no Monitor sources)
 - **VAD Model**: The Silero VAD model is distributed via git submodule (`third_party/silero-vad/`) and copied to the install directory at build time. Run `git submodule update --init --recursive` before building
 - **PipeWire Users**: The PulseAudio backend works fine under pipewire-pulse. Native PipeWire is only used as fallback when PulseAudio is completely unavailable
-- **Sherpa-onnx Users**: Currently optional. Chinese recognition accuracy is lower than cloud Whisper. You need to download model files manually
+- **Local ASR**: Not yet implemented. The codebase provides an `AsrEngine` abstract interface for future local ASR integration
 - **Window Switching**: A 200ms delayed stop prevents unnecessary restarts on quick window switches. Long inactivity will stop the pipeline
 
 ## Architecture Overview
 
 ```
-Audio Capture Thread → FrameQueue → VAD Worker Thread → UtteranceQueue → ASR Worker Thread → ResultQueue → Main Thread Poll → commitString
+Audio Capture Thread → FrameQueue → VAD Worker Thread → UtteranceQueue → ASR Worker Thread → ResultQueue → EventDispatcher → commitString
 ```
 
 Three worker threads + main thread, connected by `ThreadSafeQueue`. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.

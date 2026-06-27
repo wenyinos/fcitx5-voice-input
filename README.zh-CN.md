@@ -22,20 +22,13 @@
 
 - 中文语音输入（OpenAI Whisper API / 兼容服务）
 - Silero ONNX VAD 自动分段录音（无需手动按键控制开始结束）
-- 队列管道架构：音频采集 → VAD 分段 → ASR 识别 → 主线程上屏
+- 队列管道架构：音频采集 → VAD 分段 → ASR 识别 → EventDispatcher 上屏
 - 通过 `fcitx5-configtool` 图形化配置
-- 可选 sherpa-onnx 本地离线识别
 - 窗口快速切换自动延迟停止，防止误停
 
 ## 使用
 
 ### 1. 安装
-
-#### Arch Linux (AUR)
-
-```bash
-yay -S fcitx5-voice-input
-```
 
 #### 手动编译安装
 
@@ -49,7 +42,7 @@ yay -S fcitx5-voice-input
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `ASRBackend` | ASR 后端 (`openai` / `sherpa`) | `openai` |
+| `ASRBackend` | ASR 后端 | `openai` |
 | `OpenAIEndpoint` | API 地址 | `https://api.openai.com/v1` |
 | `OpenAIApiKey` | API Key | **（必填）** |
 | `OpenAIModel` | 模型名 | `whisper-1` |
@@ -111,33 +104,25 @@ sudo cmake --install build --prefix /usr
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `ENABLE_SHERPA_ONNX` | `OFF` | 启用 sherpa-onnx 本地 ASR（需安装 sherpa-onnx） |
 | `ENABLE_LLM_SUPPORT` | `OFF` | 启用 LLM 后处理支持（仅编译宏） |
 | `BUILD_TESTS` | `OFF` | 构建测试 |
 | `ONNXRUNTIME_ROOT` | — | ONNX Runtime 自定义安装路径 |
 
-示例 — 启用 sherpa-onnx：
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/usr \
-  -DENABLE_SHERPA_ONNX=ON
-```
 
 ## 注意事项
 
 - **API Key 安全**：API Key 明文存储在 fcitx5 配置文件中（`~/.config/fcitx5/conf/voiceinput.conf`），请注意文件权限
-- **网络要求**：默认 OpenAI 后端需要网络连接。如需离线使用，编译时启用 `ENABLE_SHERPA_ONNX=ON` 并安装 sherpa-onnx 模型
+- **网络要求**：OpenAI 后端需要网络连接。本地 ASR 可通过 AsrEngine 接口后续扩展
 - **音频设备**：默认自动选择系统音频输入设备。如需指定，在 `AudioSource` 下拉框中选择。仅支持输入源（Source），不支持 Monitor 源
 - **VAD 模型**：Silero VAD 模型通过 git submodule 分发（`third_party/silero-vad/`），编译时自动复制到安装目录。构建前务必执行 `git submodule update --init --recursive`
 - **PipeWire 用户**：PulseAudio 后端也能在 pipewire-pulse 下正常工作，仅在 PulseAudio 完全不可用时 fallback 到 PipeWire 直连
-- **Sherpa-onnx 用户**：当前版本 sherpa-onnx 为可选项，中文识别准确率低于云端 Whisper。需自行下载模型文件并配置路径
+- **本地 ASR**：暂未实现。代码提供了 `AsrEngine` 抽象接口，后续可扩展本地引擎
 - **窗口切换**：快速切换窗口时插件使用延迟停止机制（200ms），不会频繁重启流水线。长时间切出后会自动停止
 
 ## 架构简介
 
 ```
-音频捕获线程 → FrameQueue → VAD Worker 线程 → UtteranceQueue → ASR Worker 线程 → ResultQueue → 主线程轮询 → commitString
+音频捕获线程 → FrameQueue → VAD Worker 线程 → UtteranceQueue → ASR Worker 线程 → ResultQueue → EventDispatcher → commitString
 ```
 
 三个工作线程 + 主线程，通过 `ThreadSafeQueue` 连接各阶段。详见 [ARCHITECTURE.md](ARCHITECTURE.md)。

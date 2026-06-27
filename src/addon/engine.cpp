@@ -17,10 +17,6 @@
 
 #include "asr/openai_asr.h"
 
-#ifdef ENABLE_SHERPA_ONNX
-#include "asr/sherpa_asr.h"
-#endif
-
 namespace fcitx {
 
 VoiceInputEngine::VoiceInputEngine(Instance* instance)

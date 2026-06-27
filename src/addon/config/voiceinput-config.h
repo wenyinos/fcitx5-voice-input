@@ -45,7 +45,7 @@ struct AudioSourceAnnotation : public EnumAnnotation {
 };
 
 FCITX_CONFIGURATION(VoiceInputConfig,
-    // ASR backend selection: "openai" or "sherpa"
+    // ASR backend selection
     Option<std::string> asrBackend{this, "ASRBackend",
                                     _("ASR Backend"),
                                     "openai"};
