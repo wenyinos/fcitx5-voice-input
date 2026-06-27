@@ -91,6 +91,9 @@ void Pipeline::StopListening() {
     if (capture_) {
         capture_->Stop();
     }
+    if (asrEngine_) {
+        asrEngine_->Stop();
+    }
 }
 
 void Pipeline::Abort() {

@@ -119,6 +119,12 @@ void OpenaiCompatAsrEngine::FeedAudio(const float* pcm, size_t frames) {
 }
 
 void OpenaiCompatAsrEngine::Stop() {
+    cancelled_ = true;
+    if (workerThread_ && workerThread_->joinable()) {
+        FCITX_DEBUG() << "[voice-input:openai] Joining previous worker thread";
+        workerThread_->join();
+    }
+
     if (pcmBuffer_.empty()) {
         FCITX_WARN() << "[voice-input:openai] Stop with empty buffer — no audio to transcribe";
         if (resultCb_) {
@@ -131,11 +137,6 @@ void OpenaiCompatAsrEngine::Stop() {
     FCITX_INFO() << "[voice-input:openai] Stop: " << pcmBuffer_.size()
                  << " frames (" << durSec << "s), starting transcription";
 
-    // Wait for previous worker to finish, then start a new one
-    if (workerThread_ && workerThread_->joinable()) {
-        FCITX_DEBUG() << "[voice-input:openai] Joining previous worker thread";
-        workerThread_->join();
-    }
     cancelled_ = false;
     workerThread_ = std::make_unique<std::thread>(
         &OpenaiCompatAsrEngine::TranscribeWorker, this);
@@ -285,6 +286,13 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "fcitx5-voice-input/0.1.0");
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+                     +[](void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+                         auto* self = static_cast<OpenaiCompatAsrEngine*>(clientp);
+                         return self->cancelled_ ? 1 : 0;
+                     });
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
     // Also grab the Content-Type header to detect errors in non-JSON responses
     std::string contentType;
@@ -313,6 +321,9 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
+    if (res == CURLE_ABORTED_BY_CALLBACK) {
+        return "";
+    }
     if (res != CURLE_OK) {
         std::string err = curl_easy_strerror(res);
         FCITX_ERROR() << "[voice-input:openai] HTTP request failed: " << err
