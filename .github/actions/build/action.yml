@@ -50,6 +50,7 @@ runs:
       shell: bash
       run: |
         cd build
+        export LD_LIBRARY_PATH="${ONNXRUNTIME_ROOT}/lib:${LD_LIBRARY_PATH}"
         cpack -G DEB
         mv *.deb ../
         cd ..
