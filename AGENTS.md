@@ -11,6 +11,7 @@ Fcitx5 addon（共享库），三个线程（主线程/Capture/ASR），无 daem
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
   -DENABLE_SHERPA_ONNX=OFF -DENABLE_LLM_SUPPORT=OFF -DBUILD_TESTS=OFF
 cmake --build build -j"$(nproc)"
 ```

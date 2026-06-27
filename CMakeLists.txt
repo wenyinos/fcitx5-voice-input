@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(fcitx5-voice-input VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -112,7 +114,6 @@ target_compile_definitions(voice-input-addon PRIVATE
 
 # ─── Translations ────────────────────────────────────────────────────────────
 find_program(GETTEXT_MSGFMT msgfmt REQUIRED)
-set(LOCALE_DIR "${CMAKE_INSTALL_FULL_LOCALEDIR}")
 file(GLOB PO_FILES "${CMAKE_SOURCE_DIR}/po/*.po")
 foreach(PO_FILE ${PO_FILES})
     get_filename_component(PO_LANG ${PO_FILE} NAME_WE)
@@ -126,7 +127,7 @@ foreach(PO_FILE ${PO_FILES})
     )
     list(APPEND MO_FILES ${MO_FILE})
     install(FILES ${MO_FILE}
-        DESTINATION "${LOCALE_DIR}/${PO_LANG}/LC_MESSAGES"
+        DESTINATION ${CMAKE_INSTALL_LOCALEDIR}/${PO_LANG}/LC_MESSAGES
         RENAME "fcitx5-voice-input.mo"
     )
 endforeach()
