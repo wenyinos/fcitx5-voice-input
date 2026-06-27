@@ -57,7 +57,7 @@ void VoiceInputEngine::activate(const InputMethodEntry &entry,
     if (pipeline_->GetState() == Pipeline::State::IDLE) {
         pipeline_->StartListening();
     }
-    SetUIStatus("🎙 语音模式...", true);
+    ClearUI();
 }
 
 void VoiceInputEngine::deactivate(const InputMethodEntry &entry,
@@ -111,7 +111,7 @@ void VoiceInputEngine::OnPipelineStateChange(Pipeline::State oldState,
     if (newState == Pipeline::State::LISTENING) {
         eventDispatcher_.schedule([this, generation]() {
             if (generation != 0 && activeGeneration_.load() == generation && activeIc_)
-                SetUIStatus("🎙 语音模式...", true);
+                ClearUI();
         });
     } else if (newState == Pipeline::State::RECORDING) {
         eventDispatcher_.schedule([this, generation]() {
@@ -161,14 +161,12 @@ void VoiceInputEngine::SetUIStatus(const std::string &text, bool instant) {
         eventDispatcher_.schedule([this, ic, text]() {
             if (activeIc_ != ic)
                 return;
-            ic->inputPanel().setClientPreedit(Text(text));
-            ic->updatePreedit();
+            ic->inputPanel().setAuxUp(Text(text));
+            ic->updateUserInterface(UserInterfaceComponent::InputPanel);
         });
     } else {
         // Called from main thread already — update directly
-        ic->inputPanel().setClientPreedit(Text(text));
         ic->inputPanel().setAuxUp(Text(text));
-        ic->updatePreedit();
         ic->updateUserInterface(UserInterfaceComponent::InputPanel);
     }
 }
@@ -179,7 +177,6 @@ void VoiceInputEngine::ClearUI() {
     if (!ic)
         return;
     ic->inputPanel().reset();
-    ic->updatePreedit();
     ic->updateUserInterface(UserInterfaceComponent::InputPanel);
 }
 

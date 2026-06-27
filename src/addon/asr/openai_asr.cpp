@@ -206,6 +206,7 @@ void OpenaiCompatAsrEngine::TranscribeWorker() {
         }
 
         std::string text = json.value("text", "");
+        text = NormalizeChinese(text);
         FCITX_INFO() << "[voice-input:openai] transcript: \""
                      << text << "\" (" << text.size() << " chars)";
         if (resultCb_) {
@@ -266,6 +267,11 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     part = curl_mime_addpart(mime);
     curl_mime_name(part, "language");
     curl_mime_data(part, language_.c_str(), CURL_ZERO_TERMINATED);
+
+    // Prompt compatible with Whisper-style transcription APIs.
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "prompt");
+    curl_mime_data(part, "请使用简体中文输出。", CURL_ZERO_TERMINATED);
 
     // Response format
     part = curl_mime_addpart(mime);
@@ -345,6 +351,32 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     }
 
     return response;
+}
+
+std::string OpenaiCompatAsrEngine::NormalizeChinese(const std::string& text) {
+    static const std::pair<const char*, const char*> replacements[] = {
+        {"這", "这"}, {"個", "个"}, {"們", "们"}, {"說", "说"},
+        {"話", "话"}, {"麼", "么"}, {"嗎", "吗"}, {"總", "总"},
+        {"為", "为"}, {"會", "会"}, {"來", "来"}, {"時", "时"},
+        {"過", "过"}, {"還", "还"}, {"沒", "没"}, {"聽", "听"},
+        {"讓", "让"}, {"給", "给"}, {"對", "对"}, {"裡", "里"},
+        {"裏", "里"}, {"現", "现"}, {"聲", "声"}, {"應", "应"},
+        {"開", "开"}, {"關", "关"}, {"點", "点"}, {"樣", "样"},
+        {"實", "实"}, {"認", "认"}, {"識", "识"}, {"輸", "输"},
+        {"嗎", "吗"}, {"後", "后"}, {"發", "发"}, {"語", "语"},
+        {"錄", "录"}, {"轉", "转"}, {"請", "请"}, {"誰", "谁"},
+        {"哪裡", "哪里"}, {"什麼", "什么"}, {"知道", "知道"},
+    };
+
+    std::string result = text;
+    for (const auto& [from, to] : replacements) {
+        size_t pos = 0;
+        while ((pos = result.find(from, pos)) != std::string::npos) {
+            result.replace(pos, std::strlen(from), to);
+            pos += std::strlen(to);
+        }
+    }
+    return result;
 }
 
 } // namespace fcitx
