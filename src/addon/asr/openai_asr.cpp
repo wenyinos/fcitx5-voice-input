@@ -274,10 +274,6 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     curl_mime_name(part, "language");
     curl_mime_data(part, language_.c_str(), CURL_ZERO_TERMINATED);
 
-    // Prompt compatible with Whisper-style transcription APIs.
-    part = curl_mime_addpart(mime);
-    curl_mime_name(part, "prompt");
-    curl_mime_data(part, "请使用简体中文输出。", CURL_ZERO_TERMINATED);
 
     // Response format
     part = curl_mime_addpart(mime);

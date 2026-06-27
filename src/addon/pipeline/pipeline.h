@@ -10,6 +10,7 @@
 #include "capture/audio_capture.h"
 #include "vad/vad.h"
 #include "asr/asr_engine.h"
+#include "llm/llm_client.h"
 #include "types.h"
 #include "utils/thread_safe_queue.h"
 
@@ -27,6 +28,7 @@ public:
 
     void Init(const VoiceInputConfig& config);
     void SetAsrEngine(std::unique_ptr<AsrEngine> engine);
+    void SetLLMClient(std::unique_ptr<LLMClient> client);
     void SetResultCallback(ResultCallback cb);
     void SetGeneration(uint64_t gen) { generation_.store(gen); }
 
@@ -59,6 +61,9 @@ private:
 
     // ASR
     std::unique_ptr<AsrEngine> asrEngine_;
+
+    // LLM
+    std::unique_ptr<LLMClient> llmClient_;
 
     // State
     std::atomic<bool> running_{false};

@@ -44,7 +44,6 @@ private:
     void InitializeIfNeeded();
     void OnAsrResult(const std::string& text);
     void PollResults();
-    void CommitText(const std::string& text);
     void ClearUI();
     void SetStatus(const std::string& text);
 
@@ -61,6 +60,7 @@ private:
     bool initialized_ = false;
 
     std::string statusText_;
+    std::string lastCommittedText_;
 };
 
 } // namespace fcitx

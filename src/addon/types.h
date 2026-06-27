@@ -27,6 +27,7 @@ struct AsrResult {
     int64_t start_ms = 0;
     int64_t end_ms = 0;
     uint64_t generation = 0;
+    bool isLLMRefined = false;
 };
 
 } // namespace fcitx

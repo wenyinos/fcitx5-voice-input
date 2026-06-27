@@ -16,6 +16,7 @@
 #include "engine.h"
 
 #include "asr/openai_asr.h"
+#include "llm/llm_client.h"
 
 namespace fcitx {
 
@@ -129,6 +130,18 @@ void VoiceInputEngine::OnAsrResult(const std::string& text) {
     });
 }
 
+namespace {
+
+size_t Utf8CharCount(const std::string& s) {
+    size_t count = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if ((s[i] & 0xC0) != 0x80) count++;
+    }
+    return count;
+}
+
+} // namespace
+
 void VoiceInputEngine::PollResults() {
     auto& queue = pipeline_->ResultQueue();
     AsrResult result;
@@ -138,20 +151,24 @@ void VoiceInputEngine::PollResults() {
                      << " gen=" << result.generation
                      << " activeGen=" << activeGeneration_.load()
                      << " ic=" << (activeIc_ != nullptr)
-                     << " match=" << (activeGeneration_.load() == result.generation);
+                     << " match=" << (activeGeneration_.load() == result.generation)
+                     << " refined=" << result.isLLMRefined;
         if (!result.text.empty()
             && result.generation != 0
             && activeGeneration_.load() == result.generation
             && activeIc_) {
-            CommitText(result.text);
+            if (result.isLLMRefined) {
+                // Replace previous commit with LLM-refined text
+                size_t oldLen = Utf8CharCount(lastCommittedText_);
+                if (oldLen > 0) {
+                    activeIc_->deleteSurroundingText(-static_cast<int>(oldLen), 0);
+                }
+                activeIc_->commitString(result.text);
+            } else {
+                activeIc_->commitString(result.text);
+            }
+            lastCommittedText_ = result.text;
         }
-    }
-}
-
-void VoiceInputEngine::CommitText(const std::string& text) {
-    auto* ic = activeIc_;
-    if (ic) {
-        ic->commitString(text);
     }
 }
 
@@ -209,6 +226,21 @@ void VoiceInputEngine::InitializeIfNeeded() {
                      << " model=" << config_.openaiModel.value();
     } else {
         FCITX_WARN() << "[voice-input] OpenAI ASR init failed";
+    }
+
+    // LLM post-processing
+    std::string llmModel = config_.llmModel.value();
+    if (!llmModel.empty()) {
+        auto llmConfig = LLMClient::Config{};
+        llmConfig.endpoint = config_.openaiEndpoint.value();
+        llmConfig.apiKey = config_.openaiApiKey.value();
+        llmConfig.model = llmModel;
+        llmConfig.systemPrompt = config_.llmSystemPrompt.value();
+
+        auto llm = std::make_unique<LLMClient>(std::move(llmConfig));
+        pipeline_->SetLLMClient(std::move(llm));
+        FCITX_INFO() << "[voice-input] LLM post-processing enabled: "
+                     << " model=" << llmModel;
     }
 }
 

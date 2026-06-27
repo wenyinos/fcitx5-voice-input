@@ -11,7 +11,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # ─── Options ─────────────────────────────────────────────────────────────────
-option(ENABLE_LLM_SUPPORT "Enable LLM post-processing (libcurl)" OFF)
 option(BUILD_TESTS "Build unit tests" OFF)
 set(ONNXRUNTIME_ROOT "" CACHE PATH "Path to an ONNX Runtime installation")
 
@@ -102,6 +101,7 @@ set(ADDON_SOURCES
     src/addon/vad/silero_vad.cpp
     src/addon/pipeline/pipeline.cpp
     src/addon/asr/openai_asr.cpp
+    src/addon/llm/llm_client.cpp
 )
 
 set(ADDON_HEADERS
@@ -116,6 +116,7 @@ set(ADDON_HEADERS
     src/addon/vad/silero_vad.h
     src/addon/asr/asr_engine.h
     src/addon/asr/openai_asr.h
+    src/addon/llm/llm_client.h
     src/addon/pipeline/pipeline.h
     src/addon/utils/audio_buffer.h
     src/addon/utils/thread_safe_queue.h
@@ -173,10 +174,6 @@ foreach(PO_FILE ${PO_FILES})
 endforeach()
 add_custom_target(translations ALL DEPENDS ${MO_FILES})
 add_dependencies(voice-input-addon translations)
-
-if(ENABLE_LLM_SUPPORT)
-    target_compile_definitions(voice-input-addon PRIVATE ENABLE_LLM_SUPPORT)
-endif()
 
 target_compile_definitions(voice-input-addon PRIVATE
     ENABLE_SILERO_VAD

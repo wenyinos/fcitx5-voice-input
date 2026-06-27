@@ -8,6 +8,7 @@
 
 #include "capture/pipewire_capture.h"
 #include "capture/pulse_audio_capture.h"
+#include "llm/llm_client.h"
 
 using namespace std::chrono_literals;
 
@@ -51,21 +52,43 @@ void Pipeline::SetConfig(const VoiceInputConfig& config) {
     vadWorker_->SetConfig(vadConfig);
 }
 
+void Pipeline::SetLLMClient(std::unique_ptr<LLMClient> client) {
+    llmClient_ = std::move(client);
+}
+
 void Pipeline::SetAsrEngine(std::unique_ptr<AsrEngine> engine) {
     asrEngine_ = std::move(engine);
     if (asrEngine_) {
         asrEngine_->SetResultCallback(
             [this](const std::string& text, bool isFinal) {
                 if (isFinal && !text.empty()) {
-                    AsrResult result;
-                    result.text = text;
-                    result.generation = generation_.load();
+                    // Push raw ASR result immediately
+                    AsrResult rawResult;
+                    rawResult.text = text;
+                    rawResult.generation = generation_.load();
+                    rawResult.isLLMRefined = false;
                     FCITX_INFO() << "[voice-input] ASR result: text='"
                                  << text.substr(0, 50) << "'"
-                                 << " gen=" << result.generation;
-                    resultQueue_.Push(std::move(result));
+                                 << " gen=" << rawResult.generation;
+                    resultQueue_.Push(std::move(rawResult));
+
                     if (resultCb_) {
                         resultCb_(text);
+                    }
+
+                    // If LLM is configured, process and push refined result
+                    if (llmClient_) {
+                        std::string processed = llmClient_->Process(text);
+                        if (!processed.empty()) {
+                            AsrResult refinedResult;
+                            refinedResult.text = processed;
+                            refinedResult.generation = generation_.load();
+                            refinedResult.isLLMRefined = true;
+                            FCITX_INFO() << "[voice-input] LLM refined: text='"
+                                         << processed.substr(0, 50) << "'"
+                                         << " gen=" << refinedResult.generation;
+                            resultQueue_.Push(std::move(refinedResult));
+                        }
                     }
                 }
             });
