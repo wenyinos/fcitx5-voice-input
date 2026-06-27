@@ -8,7 +8,7 @@
 #include <memory>
 
 #include <curl/curl.h>
-#include <nlohmann/json.hpp>
+#include <json/json.h>
 
 #include "capture/pipewire_capture.h"
 #include "capture/pulse_audio_capture.h"
@@ -319,14 +319,26 @@ std::string Pipeline::DoLlmHttpRequest(const std::string& userText,
     std::string model = config_.llmModel.value();
     FCITX_INFO() << "[voice-input:llm] POST " << url << " model=" << model;
 
-    nlohmann::json body;
+    Json::Value body;
     body["model"] = model;
-    body["messages"] = {
-        {{"role", "system"}, {"content", systemPrompt}},
-        {{"role", "user"}, {"content", userText}}
-    };
     body["temperature"] = 0.0;
-    std::string bodyStr = body.dump();
+
+    Json::Value messages(Json::arrayValue);
+    Json::Value sysMsg;
+    sysMsg["role"] = "system";
+    sysMsg["content"] = systemPrompt;
+    messages.append(sysMsg);
+
+    Json::Value userMsg;
+    userMsg["role"] = "user";
+    userMsg["content"] = userText;
+    messages.append(userMsg);
+
+    body["messages"] = messages;
+
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+    std::string bodyStr = Json::writeString(writer, body);
 
     struct curl_slist* headers = nullptr;
     std::string auth = "Authorization: Bearer " + config_.openaiApiKey.value();
@@ -358,19 +370,21 @@ std::string Pipeline::DoLlmHttpRequest(const std::string& userText,
 
     FCITX_INFO() << "[voice-input:llm] Response: " << response.size() << " bytes";
 
-    try {
-        auto json = nlohmann::json::parse(response);
-        if (json.contains("error")) {
-            FCITX_ERROR() << "[voice-input:llm] API error: "
-                          << json["error"].value("message", "unknown");
-            return "";
-        }
-        std::string content = json["choices"][0]["message"]["content"];
-        return content;
-    } catch (const std::exception& e) {
-        FCITX_ERROR() << "[voice-input:llm] JSON parse error: " << e.what();
+    Json::Value json;
+    Json::Reader reader;
+    if (!reader.parse(response, json)) {
+        FCITX_ERROR() << "[voice-input:llm] JSON parse error: "
+                       << reader.getFormattedErrorMessages();
         return "";
     }
+
+    if (json.isMember("error")) {
+        FCITX_ERROR() << "[voice-input:llm] API error: "
+                      << json["error"].get("message", Json::Value("unknown")).asString();
+        return "";
+    }
+    std::string content = json["choices"][0]["message"]["content"].asString();
+    return content;
 }
 
 } // namespace fcitx

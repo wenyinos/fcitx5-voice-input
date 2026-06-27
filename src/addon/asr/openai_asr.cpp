@@ -6,7 +6,7 @@
 
 #include <curl/curl.h>
 #include <fcitx-utils/log.h>
-#include <nlohmann/json.hpp>
+#include <json/json.h>
 
 namespace fcitx {
 namespace {
@@ -191,34 +191,36 @@ void OpenaiCompatAsrEngine::TranscribeWorker() {
                  << " bytes in " << httpMs << "ms";
 
     // Parse JSON response
-    try {
-        auto json = nlohmann::json::parse(response);
-
-        // Check for error
-        if (json.contains("error")) {
-            std::string errMsg = json["error"].value("message", "unknown error");
-            FCITX_ERROR() << "[voice-input:openai] API error: " << errMsg;
-            if (errorCb_) {
-                errorCb_("API error: " + errMsg);
-            }
-            finishEmpty();
-            return;
-        }
-
-        std::string text = json.value("text", "");
-        text = NormalizeChinese(text);
-        FCITX_INFO() << "[voice-input:openai] transcript: \""
-                     << text << "\" (" << text.size() << " chars)";
-        if (resultCb_) {
-            resultCb_(text, true);
-        }
-    } catch (const std::exception& e) {
-        FCITX_ERROR() << "[voice-input:openai] JSON parse error: " << e.what()
-                      << " response=" << response.substr(0, 200);
+    Json::Value json;
+    Json::Reader reader;
+    if (!reader.parse(response, json)) {
+        FCITX_ERROR() << "[voice-input:openai] JSON parse error: "
+                       << reader.getFormattedErrorMessages()
+                       << " response=" << response.substr(0, 200);
         if (errorCb_) {
-            errorCb_("JSON parse error: " + std::string(e.what()));
+            errorCb_("JSON parse error");
         }
         finishEmpty();
+        return;
+    }
+
+    // Check for error
+    if (json.isMember("error")) {
+        std::string errMsg = json["error"].get("message", Json::Value("unknown error")).asString();
+        FCITX_ERROR() << "[voice-input:openai] API error: " << errMsg;
+        if (errorCb_) {
+            errorCb_("API error: " + errMsg);
+        }
+        finishEmpty();
+        return;
+    }
+
+    std::string text = json.get("text", Json::Value("")).asString();
+    text = NormalizeChinese(text);
+    FCITX_INFO() << "[voice-input:openai] transcript: \""
+                 << text << "\" (" << text.size() << " chars)";
+    if (resultCb_) {
+        resultCb_(text, true);
     }
 }
 
@@ -340,14 +342,11 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
         std::string errMsg = "HTTP " + std::to_string(httpCode);
         if (!response.empty()) {
             // Try to extract error message from response
-            try {
-                auto json = nlohmann::json::parse(response);
-                if (json.contains("error")) {
-                    errMsg += ": " + json["error"].value("message", response);
-                } else {
-                    errMsg += ": " + response;
-                }
-            } catch (...) {
+            Json::Value ejson;
+            Json::Reader ereader;
+            if (ereader.parse(response, ejson) && ejson.isMember("error")) {
+                errMsg += ": " + ejson["error"].get("message", Json::Value(response)).asString();
+            } else {
                 errMsg += ": " + response;
             }
         }

@@ -46,13 +46,7 @@ endif()
 pkg_check_modules(PULSE REQUIRED libpulse-simple libpulse)
 
 # JSON parsing
-include(FetchContent)
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-)
-FetchContent_MakeAvailable(nlohmann_json)
+pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 
 # HTTP client (for OpenAI-compatible ASR)
 find_package(CURL REQUIRED)
@@ -100,7 +94,7 @@ target_include_directories(voice-input-addon PRIVATE
     ${FCITX5_INCLUDE_DIRS}
     ${PIPEWIRE_INCLUDE_DIRS}
     ${PULSE_INCLUDE_DIRS}
-    ${nlohmann_json_SOURCE_DIR}/include
+    ${JSONCPP_INCLUDE_DIRS}
     ${CURL_INCLUDE_DIRS}
     src/addon
 )
@@ -109,6 +103,7 @@ target_link_libraries(voice-input-addon PRIVATE
     ${FCITX5_LIBRARIES}
     ${PIPEWIRE_LIBRARIES}
     ${PULSE_LIBRARIES}
+    ${JSONCPP_LIBRARIES}
     CURL::libcurl
 )
 
