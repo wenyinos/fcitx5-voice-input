@@ -104,7 +104,6 @@ sudo cmake --install build --prefix /usr
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `ENABLE_LLM_SUPPORT` | `OFF` | Enable LLM post-processing (compile macro only) |
 | `BUILD_TESTS` | `OFF` | Build tests |
 | `ONNXRUNTIME_ROOT` | — | Custom ONNX Runtime install path |
 

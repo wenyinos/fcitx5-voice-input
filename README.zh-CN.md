@@ -104,7 +104,6 @@ sudo cmake --install build --prefix /usr
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `ENABLE_LLM_SUPPORT` | `OFF` | 启用 LLM 后处理支持（仅编译宏） |
 | `BUILD_TESTS` | `OFF` | 构建测试 |
 | `ONNXRUNTIME_ROOT` | — | ONNX Runtime 自定义安装路径 |
 

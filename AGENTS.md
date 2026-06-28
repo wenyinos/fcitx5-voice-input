@@ -12,11 +12,11 @@ Fcitx5 addon（共享库），多线程（主线程/Capture/VAD Worker/ASR Worke
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
-  -DENABLE_LLM_SUPPORT=OFF -DBUILD_TESTS=OFF
+  -DBUILD_TESTS=OFF
 cmake --build build -j"$(nproc)"
 ```
 
-选项：`ENABLE_LLM_SUPPORT`（编译宏），`BUILD_TESTS`（目前无测试文件）。
+选项：`BUILD_TESTS`（目前无测试文件）。
 
 ## 依赖（全部必需）
 
