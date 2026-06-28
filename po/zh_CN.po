@@ -15,8 +15,8 @@ msgstr "OpenAI API 地址"
 msgid "OpenAI API Key"
 msgstr "OpenAI API 密钥"
 
-msgid "OpenAI Model"
-msgstr "OpenAI 模型"
+msgid "语音模型"
+msgstr "语音模型"
 
 msgid "Output Language"
 msgstr "输出语言"
@@ -27,11 +27,11 @@ msgstr "语音检测阈值 (%)"
 msgid "Silence Threshold (ms)"
 msgstr "静音检测阈值 (毫秒)"
 
-msgid "LLM Model"
-msgstr "LLM 模型"
+msgid "后处理 LLM 模型"
+msgstr "后处理 LLM 模型"
 
-msgid "LLM System Prompt"
-msgstr "LLM 系统提示词"
+msgid "后处理系统提示词"
+msgstr "后处理系统提示词"
 
 msgid "语音输入就绪"
 msgstr "语音输入就绪"

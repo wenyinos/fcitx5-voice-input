@@ -45,7 +45,7 @@ FCITX_CONFIGURATION(VoiceInputConfig,
     Option<std::string> openaiApiKey{this, "OpenAIApiKey",
                                       _("OpenAI API Key"), ""};
     Option<std::string> openaiModel{this, "OpenAIModel",
-                                     _("OpenAI Model"),
+                                     _("语音模型"),
                                      "whisper-1"};
     Option<std::string, NoConstrain<std::string>,
            DefaultMarshaller<std::string>, OpenaiLanguageAnnotation>
@@ -55,9 +55,9 @@ FCITX_CONFIGURATION(VoiceInputConfig,
     Option<bool> llmEnabled{this, "LLMEnabled",
                              _("LLM Post-processing"), false};
     Option<std::string> llmModel{this, "LLMModel",
-                                  _("LLM Model"), ""};
+                                  _("后处理 LLM 模型"), ""};
     Option<std::string> llmSystemPrompt{this, "LLMSystemPrompt",
-                                         _("LLM System Prompt"), ""};
+                                         _("后处理系统提示词"), ""};
     Option<bool> llmStream{this, "LLMStream",
                             _("LLM Streaming"), true};
 
