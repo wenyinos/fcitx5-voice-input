@@ -12,4 +12,4 @@ RUN useradd -m builder && \
     echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 WORKDIR /build
-CMD ["su", "builder", "-c", "makepkg -f --noconfirm"]
+CMD chown -R builder:builder /build && su builder -c "makepkg -f --noconfirm"
