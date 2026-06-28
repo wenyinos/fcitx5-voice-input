@@ -1,5 +1,9 @@
 <div align="center">
 
+<p align="center">
+  <img width="1774" alt="Banner" src="https://github.com/user-attachments/assets/ecd6665e-937a-4e81-8472-bd065dd5261f" />
+</p>
+
 # fcitx5-voice-input
 
 <p>
