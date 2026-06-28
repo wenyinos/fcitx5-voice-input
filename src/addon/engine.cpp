@@ -221,7 +221,6 @@ void VoiceInputEngine::SetStatus(const std::string& text) {
         statusText_ = text;
         if (activeIc_) {
             activeIc_->inputPanel().setAuxDown(Text(text));
-            activeIc_->inputPanel().setPreedit(Text(text));
             activeIc_->updateUserInterface(UserInterfaceComponent::InputPanel);
             activeIc_->updateUserInterface(UserInterfaceComponent::StatusArea);
         }
@@ -269,6 +268,12 @@ void VoiceInputEngine::InitializeIfNeeded() {
         [this](bool speaking) {
             if (speaking) {
                 SetStatus(_("正在录音中..."));
+                eventDispatcher_.schedule([this]() {
+                    if (!activeIc_) return;
+                    activeIc_->inputPanel().setPreedit(Text(" "));
+                    activeIc_->updateUserInterface(
+                        UserInterfaceComponent::InputPanel);
+                });
             } else {
                 SetStatus(_("语音输入就绪"));
             }
