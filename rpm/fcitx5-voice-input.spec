@@ -6,8 +6,6 @@ License:        LGPL-3.0-or-later
 URL:            https://github.com/devcxl/fcitx5-voice-input
 Source0:        %{name}-%{version}.tar.gz
 
-%define debug_package %{nil}
-
 BuildRequires:  cmake >= 3.20
 BuildRequires:  gcc-c++
 BuildRequires:  pkgconfig(Fcitx5Core)

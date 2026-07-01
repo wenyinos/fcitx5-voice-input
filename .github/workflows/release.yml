@@ -96,7 +96,7 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -name '*.deb' -exec cp {} release/ \;
-          find artifacts -name '*.rpm' -exec cp {} release/ \;
+          find artifacts -name '*.rpm' ! -name '*debug*' -exec cp {} release/ \;
           find artifacts -name '*.tar.gz' -exec cp {} release/ \;
           find artifacts -name '*.pkg.tar.zst' -exec cp {} release/ \;
 
