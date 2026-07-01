@@ -66,6 +66,12 @@ private:
     // Push-to-talk state
     bool pttActive_ = false;
     int pttHeldKeyCode_ = 0;  // hardware scancode of held hotkey
+    std::unique_ptr<EventSourceTime> pttDelayedStopEvent_;
+
+    // Audio level visualization
+    std::atomic<int> audioLevel_{0};
+    std::atomic<bool> recording_{false};
+    std::unique_ptr<EventSourceTime> levelTimer_;
 };
 
 } // namespace fcitx

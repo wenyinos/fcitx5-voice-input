@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 
 #include <fcitx-utils/log.h>
@@ -55,6 +56,10 @@ void VADWorker::SetVadStatusCallback(VadStatusCallback cb) {
     vadStatusCb_ = std::move(cb);
 }
 
+void VADWorker::SetLevelCallback(LevelCallback cb) {
+    levelCb_ = std::move(cb);
+}
+
 void VADWorker::Start() {
     if (running_) return;
 
@@ -101,6 +106,15 @@ void VADWorker::WorkerLoop() {
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
             continue;
+        }
+
+        // Compute audio level (RMS → 0-10 scale)
+        if (levelCb_) {
+            float sumSq = 0.0f;
+            for (auto s : frame.pcm) sumSq += static_cast<float>(s) * s;
+            float rms = std::sqrt(sumSq / frame.pcm.size());
+            int level = static_cast<int>(std::min(rms / 3000.0f * 10.0f, 10.0f));
+            levelCb_(level);
         }
 
         if (directPush_) {

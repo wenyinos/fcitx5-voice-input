@@ -166,6 +166,10 @@ void Pipeline::SetVadStatusCallback(VADWorker::VadStatusCallback cb) {
     vadWorker_->SetVadStatusCallback(std::move(cb));
 }
 
+void Pipeline::SetLevelCallback(VADWorker::LevelCallback cb) {
+    vadWorker_->SetLevelCallback(std::move(cb));
+}
+
 void Pipeline::Start() {
     if (running_) return;
 
@@ -217,6 +221,13 @@ void Pipeline::Stop() {
     while (resultQueue_.TryPop(r)) {}
 
     FCITX_INFO() << "[voice-input] Pipeline stopped";
+}
+
+void Pipeline::StopCapture() {
+    if (capture_) {
+        capture_->Stop();
+        FCITX_INFO() << "[voice-input] Capture stopped (PTT release)";
+    }
 }
 
 void Pipeline::Abort() {

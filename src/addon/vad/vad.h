@@ -37,11 +37,13 @@ public:
     VADWorker& operator=(const VADWorker&) = delete;
 
     using VadStatusCallback = std::function<void(bool speaking)>;
+    using LevelCallback = std::function<void(int level)>;  // level: 0-10
 
     void SetConfig(const Config& config);
     void SetFrameQueue(ThreadSafeQueue<AudioFrame>* queue);
     void SetUtteranceQueue(ThreadSafeQueue<Utterance>* queue);
     void SetVadStatusCallback(VadStatusCallback cb);
+    void SetLevelCallback(LevelCallback cb);
 
     void Start();
     void Stop();
@@ -70,6 +72,7 @@ private:
 
     // Callback
     VadStatusCallback vadStatusCb_;
+    LevelCallback levelCb_;
 
     // Direct push mode (skip VAD model)
     bool directPush_ = false;

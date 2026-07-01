@@ -1,5 +1,5 @@
 Name:           fcitx5-voice-input
-Version:        0.1.2
+Version:        0.1.3
 Release:        1%{?dist}
 Summary:        Fcitx5 voice input addon with ASR via OpenAI-compatible API
 License:        LGPL-3.0-or-later
@@ -51,6 +51,11 @@ SiliconFlow, Xiaomi MiMo ASR, etc.).
 %{_datadir}/locale/*/LC_MESSAGES/fcitx5-voice-input.mo
 
 %changelog
+* Tue Jul 01 2026 Wenyin Root <64475363+devcxl@users.noreply.github.com> - 0.1.3-1
+- PTT release delayed stop (200ms) to capture trailing audio
+- Audio level visualization during recording (RMS-based bar indicator)
+- Stop audio capture immediately on PTT release (StopCapture)
+
 * Tue Jul 01 2026 Wenyin Root <64475363+devcxl@users.noreply.github.com> - 0.1.2-1
 - Fix PTT: commit ASR result directly from worker thread (bypass eventDispatcher)
 - Add tray icon via InputMethodEntry::setIcon()

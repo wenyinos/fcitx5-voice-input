@@ -32,11 +32,13 @@ public:
     void SetLLMStream(bool stream) { llmStream_ = stream; }
     void SetResultCallback(ResultCallback cb);
     void SetVadStatusCallback(VADWorker::VadStatusCallback cb);
+    void SetLevelCallback(VADWorker::LevelCallback cb);
     void SetGeneration(uint64_t gen) { generation_.store(gen); }
 
     // Lifecycle
     void Start();
     void Stop();
+    void StopCapture();  // Stop audio capture only (non-blocking)
     void Abort();
     bool IsRunning() const { return running_.load(); }
 

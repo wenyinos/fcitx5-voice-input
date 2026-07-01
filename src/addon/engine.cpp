@@ -93,6 +93,9 @@ void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
 
     pttActive_ = false;
     pttHeldKeyCode_ = 0;
+    pttDelayedStopEvent_.reset();
+    recording_.store(false);
+    levelTimer_.reset();
     ClearUI();
 
     delayedStopEvent_ = instance_->eventLoop().addTimeEvent(
@@ -156,13 +159,44 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
         pttHeldKeyCode_ = 0;
         if (pttActive_) {
             pttActive_ = false;
+            // Delayed stop: capture trailing audio for 200ms
+            uint64_t gen = sessionGeneration_.load();
+            pttDelayedStopEvent_ = instance_->eventLoop().addTimeEvent(
+                CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 200000, 0,
+                [this, gen](EventSourceTime*, uint64_t) {
+                    if (pttActive_) return true;  // cancelled by new press
+                    pipeline_->StopCapture();
+                    FCITX_INFO() << "[voice-input] PTT delayed stop";
+                    return true;
+                });
+            pttDelayedStopEvent_->setOneShot();
             SetStatus(_("Recognizing..."));
             FCITX_INFO() << "[voice-input] PTT released";
         }
     } else if (!keyEvent.isRelease()) {
+        // Cancel pending delayed stop on new press
+        pttDelayedStopEvent_.reset();
         pttHeldKeyCode_ = keyEvent.rawKey().code();
         if (!pttActive_) {
             pttActive_ = true;
+            recording_.store(true);
+            // Start level update timer for PTT mode
+            if (!levelTimer_) {
+                levelTimer_ = instance_->eventLoop().addTimeEvent(
+                    CLOCK_MONOTONIC, 0, 200000,
+                    [this](EventSourceTime*, uint64_t) {
+                        if (!recording_.load()) {
+                            levelTimer_.reset();
+                            return true;
+                        }
+                        int lvl = audioLevel_.load();
+                        std::string bar;
+                        for (int i = 0; i < 10; i++)
+                            bar += (i < lvl) ? "█" : "░";
+                        SetStatus(std::string(_("Recording...")) + " [" + bar + "]");
+                        return true;
+                    });
+            }
             pipeline_->Start();
             SetStatus(_("Recording..."));
             FCITX_INFO() << "[voice-input] PTT pressed";
@@ -321,7 +355,24 @@ void VoiceInputEngine::InitializeIfNeeded() {
     pipeline_->SetVadStatusCallback(
         [this](bool speaking) {
             if (speaking) {
-                SetStatus(_("Recording in progress..."));
+                recording_.store(true);
+                // Start level update timer (200ms interval)
+                if (!levelTimer_) {
+                    levelTimer_ = instance_->eventLoop().addTimeEvent(
+                        CLOCK_MONOTONIC, 0, 200000,
+                        [this](EventSourceTime*, uint64_t) {
+                            if (!recording_.load()) {
+                                levelTimer_.reset();
+                                return true;
+                            }
+                            int lvl = audioLevel_.load();
+                            std::string bar;
+                            for (int i = 0; i < 10; i++)
+                                bar += (i < lvl) ? "█" : "░";
+                            SetStatus(std::string(_("Recording...")) + " [" + bar + "]");
+                            return true;
+                        });
+                }
                 eventDispatcher_.schedule([this]() {
                     if (!activeIc_) return;
                     activeIc_->inputPanel().setPreedit(Text(" "));
@@ -329,8 +380,14 @@ void VoiceInputEngine::InitializeIfNeeded() {
                         UserInterfaceComponent::InputPanel);
                 });
             } else {
+                recording_.store(false);
                 SetStatus(_("Voice input ready"));
             }
+        });
+
+    pipeline_->SetLevelCallback(
+        [this](int level) {
+            audioLevel_.store(level);
         });
 
     pipeline_->Init(config_);
