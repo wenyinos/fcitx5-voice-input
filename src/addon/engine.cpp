@@ -162,7 +162,6 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
         pttHeldKeyCode_ = 0;
         if (pttActive_) {
             pttActive_ = false;
-            pipeline_->Stop();
             SetStatus(_("Recognizing..."));
             FCITX_INFO() << "[voice-input] PTT released";
         }
@@ -183,10 +182,20 @@ void VoiceInputEngine::OnAsrResult(const std::string& text) {
                  << text.substr(0, 30) << "'"
                  << " sessionGen=" << generation
                  << " activeGen=" << activeGeneration_.load();
+
+    // Commit directly — pipeline_->Stop() in PTT mode blocks the main thread,
+    // so scheduled callbacks can't run until after deactivate increments generation.
+    if (generation != 0 && activeGeneration_.load() == generation && activeIc_) {
+        eventDispatcher_.schedule([this, text, generation]() {
+            if (activeGeneration_.load() != generation || !activeIc_) return;
+            activeIc_->commitString(text);
+            SetStatus(_("Voice input ready"));
+            FCITX_INFO() << "[voice-input] Committed: \"" << text << "\"";
+        });
+    }
+
     eventDispatcher_.schedule([this, generation]() {
         if (generation == 0 || activeGeneration_.load() != generation) {
-            FCITX_INFO() << "[voice-input] PollResults skipped: gen="
-                         << generation << " active=" << activeGeneration_.load();
             return;
         }
         PollResults();
