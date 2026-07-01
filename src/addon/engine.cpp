@@ -120,17 +120,13 @@ std::vector<InputMethodEntry> VoiceInputEngine::listInputMethods() {
     entries.emplace_back("voiceinput", _("Fcitx5 Voice Input"), "zh_CN",
                          "voiceinput");
     entries.back().setConfigurable(true);
+    entries.back().setIcon("fcitx5-voice-input");
     return entries;
 }
 
 void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
                                 KeyEvent& keyEvent) {
     FCITX_UNUSED(entry);
-    FCITX_INFO() << "[voice-input] keyEvent: sym=" << keyEvent.rawKey().sym()
-                 << " code=" << keyEvent.rawKey().code()
-                 << " release=" << keyEvent.isRelease()
-                 << " ptt=" << config_.voiceInputMode.value()
-                 << " ic=" << (activeIc_ != nullptr);
 
     // Commit pending preedit on any key press
     if (!pendingPreeditText_.empty() && activeIc_ && !keyEvent.isRelease()) {
@@ -155,8 +151,6 @@ void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
         }
     }
     if (!isPTTKey) return;
-
-    FCITX_INFO() << "[voice-input] PTT key matched: release=" << keyEvent.isRelease();
 
     if (keyEvent.isRelease() && keyEvent.rawKey().code() == pttHeldKeyCode_) {
         pttHeldKeyCode_ = 0;
@@ -183,17 +177,17 @@ void VoiceInputEngine::OnAsrResult(const std::string& text) {
                  << " sessionGen=" << generation
                  << " activeGen=" << activeGeneration_.load();
 
-    // Commit directly — pipeline_->Stop() in PTT mode blocks the main thread,
-    // so scheduled callbacks can't run until after deactivate increments generation.
+    // Commit directly from ASR worker thread.
+    // commitString() is thread-safe (fcitx5 dispatches to main thread internally).
+    // Cannot use eventDispatcher_.schedule() because pipeline_->Stop() blocks
+    // the main thread, preventing scheduled callbacks from executing until
+    // after deactivate increments generation.
     if (generation != 0 && activeGeneration_.load() == generation && activeIc_) {
-        eventDispatcher_.schedule([this, text, generation]() {
-            if (activeGeneration_.load() != generation || !activeIc_) return;
-            activeIc_->commitString(text);
-            SetStatus(_("Voice input ready"));
-            FCITX_INFO() << "[voice-input] Committed: \"" << text << "\"";
-        });
+        activeIc_->commitString(text);
+        FCITX_INFO() << "[voice-input] Committed directly: \"" << text << "\"";
     }
 
+    // Still schedule PollResults for non-PTT mode (VAD) compatibility
     eventDispatcher_.schedule([this, generation]() {
         if (generation == 0 || activeGeneration_.load() != generation) {
             return;

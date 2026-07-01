@@ -6,7 +6,6 @@ Comment=Fcitx5 voice input addon with ASR via OpenAI-compatible API
 Comment[zh_CN]=通过 OpenAI 兼容 API 实现的语音输入
 Category=InputMethod
 Configurable=True
-Icon=fcitx5-voice-input
 Type=SharedLibrary
 Library=voice-input-addon
 Version=@PROJECT_VERSION@
