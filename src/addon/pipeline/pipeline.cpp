@@ -171,7 +171,22 @@ void Pipeline::SetLevelCallback(VADWorker::LevelCallback cb) {
 }
 
 void Pipeline::Start() {
-    if (running_) return;
+    if (running_) {
+        // Pipeline still running from previous PTT session — restart cleanly
+        FCITX_INFO() << "[voice-input] Pipeline restarting (previous session active)";
+        if (capture_) capture_->Stop();
+        running_ = false;
+        vadWorker_->Stop();
+        if (asrThread_ && asrThread_->joinable()) {
+            asrThread_->join();
+            asrThread_.reset();
+        }
+        if (asrEngine_) asrEngine_->Stop();
+        if (capture_) capture_.reset();
+        // Drain stale results
+        AsrResult r;
+        while (resultQueue_.TryPop(r)) {}
+    }
 
     if (!asrEngine_) {
         FCITX_ERROR() << "[voice-input] No ASR engine configured";

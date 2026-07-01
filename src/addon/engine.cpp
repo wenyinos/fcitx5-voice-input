@@ -211,17 +211,6 @@ void VoiceInputEngine::OnAsrResult(const std::string& text) {
                  << " sessionGen=" << generation
                  << " activeGen=" << activeGeneration_.load();
 
-    // Commit directly from ASR worker thread.
-    // commitString() is thread-safe (fcitx5 dispatches to main thread internally).
-    // Cannot use eventDispatcher_.schedule() because pipeline_->Stop() blocks
-    // the main thread, preventing scheduled callbacks from executing until
-    // after deactivate increments generation.
-    if (generation != 0 && activeGeneration_.load() == generation && activeIc_) {
-        activeIc_->commitString(text);
-        FCITX_INFO() << "[voice-input] Committed directly: \"" << text << "\"";
-    }
-
-    // Still schedule PollResults for non-PTT mode (VAD) compatibility
     eventDispatcher_.schedule([this, generation]() {
         if (generation == 0 || activeGeneration_.load() != generation) {
             return;
