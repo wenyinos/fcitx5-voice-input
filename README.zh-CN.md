@@ -24,9 +24,14 @@
 
 ## 功能
 
-- 中文语音输入（OpenAI Whisper API / 兼容服务）
-- Silero ONNX VAD 自动分段录音（无需手动按键控制开始结束）
-- 队列管道架构：音频采集 → VAD 分段 → ASR 识别 → EventDispatcher 上屏
+- 通过 OpenAI 兼容 API 进行语音识别（Whisper、Groq、SiliconFlow 等）
+- **小米 MiMo ASR**（`mimo-v2.5-asr`）原生支持
+- **Chat Completions API 格式**（`/chat/completions` + JSON Base64），兼容不支持 Whisper 端点的服务商
+- **两种录音模式**：
+  - **VAD 自动分段**：Silero ONNX VAD 自动检测语音边界（免按键）
+  - **Push-to-Talk**：按住热键（默认 Right Ctrl）录音，松开提交（隐私友好）
+- 从 API 获取可用模型列表，下拉选择
+- LLM 后处理（纠错 / 翻译 / 格式化）
 - 通过 `fcitx5-configtool` 图形化配置
 - 窗口快速切换自动延迟停止，防止误停
 
@@ -42,6 +47,13 @@
 
 见下方 [编译构建](#编译构建)。
 
+#### Fedora RPM
+
+```bash
+rpmbuild -ba fcitx5-voice-input.spec
+sudo dnf install ~/rpmbuild/RPMS/x86_64/fcitx5-voice-input-*.rpm
+```
+
 ### 2. 配置
 
 安装后，打开 `fcitx5-configtool`，在 Input Method 列表中找到 **Voice Input** 并添加到输入法列表。
@@ -50,28 +62,40 @@
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `ASRBackend` | ASR 后端 | `openai` |
-| `OpenAIEndpoint` | API 地址 | `https://api.openai.com/v1` |
-| `OpenAIApiKey` | API Key | **（必填）** |
-| `OpenAIModel` | 模型名 | `whisper-1` |
-| `OpenAILanguage` | 输出语言，留空自动检测 | （空） |
-| `AudioSource` | 音频输入设备，留空自动选择 | （空） |
-| `VADThreshold` | VAD 灵敏度 (0-100)，越高越不易触发 | `50` |
-| `SilenceThresholdMs` | 静音多久结束说话 (ms) | `800` |
+| `ASR Backend` | ASR 后端（`openai` / `mimo`） | `openai` |
+| `API Format` | API 格式：Multipart Form 或 JSON Base64 | `whisper` |
+| `Recording Mode` | 录音模式：VAD 自动分段或 Push-to-Talk | `vad` |
+| `Push-to-Talk Hotkey` | PTT 模式热键 | Right Ctrl |
+| `OpenAI API Endpoint` | API 地址 | `https://api.openai.com/v1` |
+| `OpenAI API Key` | API Key | **（必填）** |
+| `Voice Model` | 模型名 | `whisper-1` |
+| `Output Language` | 输出语言，留空自动检测 | （空） |
+| `VAD Threshold (%)` | VAD 灵敏度 (0-100)，越高越不易触发 | `50` |
+| `Silence Threshold (ms)` | 静音多久结束说话 (ms) | `800` |
 
-**API Key 配置**：在 `OpenAIApiKey` 中填入你的 API Key。支持所有 OpenAI 兼容服务，如：
+**API Key 配置**：在 `OpenAI API Key` 中填入你的 API Key。支持所有 OpenAI 兼容服务，如：
 
 - [OpenAI](https://platform.openai.com/) — `https://api.openai.com/v1`
 - [Groq](https://console.groq.com/) — `https://api.groq.com/openai/v1`
 - [硅基流动 (SiliconFlow)](https://siliconflow.cn/) — `https://api.siliconflow.cn/v1`
+- [小米 MiMo](https://mimo.mi.com/) — ASR Backend 选 `Xiaomi MiMo ASR`
+
+**获取可用模型**：填写 Endpoint 和 API Key 后，勾选 **Fetch Available Models** → Apply → 重新打开配置即可从下拉框选择模型。
 
 ### 3. 使用
 
+**VAD 模式（默认）：**
 1. 切换到 **Voice Input** 输入法
 2. 开始说话，VAD 自动检测人声并录音
 3. 停止说话（默认 800ms 静音超时），自动发送 ASR 识别
 4. 识别结果自动上屏
 5. 保持语音输入模式，继续说话可连续识别
+
+**Push-to-Talk 模式：**
+1. 切换到 **Voice Input** 输入法
+2. 按住热键（默认 Right Ctrl）— 开始录音
+3. 松开热键 — 音频发送 ASR 识别
+4. 识别结果自动上屏
 
 切换窗口时插件会自动延迟 200ms 停止，快速切回会取消停止，避免不必要的重启。
 
@@ -83,12 +107,14 @@
 - `libpulse-simple` — PulseAudio 音频捕获（优先）
 - `libpipewire-0.3` — PipeWire 音频捕获（fallback）
 - `jsoncpp` — JSON 解析
-- `libcurl` — HTTP 客户端（OpenAI ASR 必需）
+- `libcurl` — HTTP 客户端（ASR 必需）
 - `onnxruntime` — Silero VAD ONNX Runtime
 
 > **Arch Linux:** `sudo pacman -S fcitx5 pulseaudio pipewire jsoncpp curl onnxruntime-cpu`
 >
 > **Debian/Ubuntu:** `sudo apt install fcitx5 libpulse-dev libpipewire-0.3-dev libjsoncpp-dev libcurl4-openssl-dev libonnxruntime-dev`
+>
+> **Fedora:** `sudo dnf install fcitx5-devel pipewire-devel pulseaudio-libs-devel jsoncpp-devel libcurl-devel onnxruntime-devel`
 
 ### 编译
 
@@ -119,11 +145,10 @@ sudo cmake --install build --prefix /usr
 ## 注意事项
 
 - **API Key 安全**：API Key 明文存储在 fcitx5 配置文件中（`~/.config/fcitx5/conf/voiceinput.conf`），请注意文件权限
-- **网络要求**：OpenAI 后端需要网络连接。本地 ASR 可通过 AsrEngine 接口后续扩展
-- **音频设备**：默认自动选择系统音频输入设备。如需指定，在 `AudioSource` 下拉框中选择。仅支持输入源（Source），不支持 Monitor 源
-- **VAD 模型**：Silero VAD 模型通过 git submodule 分发（`third_party/silero-vad/`），编译时自动复制到安装目录。构建前务必执行 `git submodule update --init --recursive`
+- **网络要求**：云端 ASR 后端需要网络连接。本地 ASR 可通过 AsrEngine 接口后续扩展
+- **音频设备**：默认自动选择系统音频输入设备。如需指定，在下拉框中选择。仅支持输入源（Source），不支持 Monitor 源
+- **VAD 模型**：Silero VAD 模型通过 git submodule 分发（`third_party/silero-vad/`），编译时自动复制到安装目录。Push-to-Talk 模式不需要此模型
 - **PipeWire 用户**：PulseAudio 后端也能在 pipewire-pulse 下正常工作，仅在 PulseAudio 完全不可用时 fallback 到 PipeWire 直连
-- **本地 ASR**：暂未实现。代码提供了 `AsrEngine` 抽象接口，后续可扩展本地引擎
 - **窗口切换**：快速切换窗口时插件使用延迟停止机制（200ms），不会频繁重启流水线。长时间切出后会自动停止
 
 ## 架构简介

@@ -3,8 +3,16 @@ set -euo pipefail
 
 PKG="fcitx5-voice-input"
 TAG="${GITHUB_REF_NAME}"
-VER="${TAG#v}"
 
+# Only build AUR packages on tag pushes (v*)
+if [[ "${TAG}" != v* ]]; then
+  echo "Skipping AUR build: not a tag push (${TAG})"
+  echo "tarball=" >> "${GITHUB_OUTPUT}"
+  echo "pkgbuild=" >> "${GITHUB_OUTPUT}"
+  exit 0
+fi
+
+VER="${TAG#v}"
 mkdir -p dist/aur/src
 
 # Source tarball with submodules (top dir = pkgname for makepkg)

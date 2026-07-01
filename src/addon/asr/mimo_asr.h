@@ -11,30 +11,27 @@
 namespace fcitx {
 
 /**
- * ASR engine for OpenAI Whisper API and compatible providers
- * (Groq, Together AI, DeepSeek, etc.).
+ * ASR engine for Xiaomi MiMo ASR (mimo-v2.5-asr).
  *
- * User configures the endpoint, API key, and model name at runtime.
- * Audio is sent as a WAV file via multipart/form-data POST request.
+ * Uses /v1/chat/completions endpoint with input_audio content.
+ * Endpoint defaults to https://api.xiaomimimo.com/v1.
  */
-class OpenaiCompatAsrEngine : public AsrEngine {
+class MiMoAsrEngine : public AsrEngine {
 public:
-    OpenaiCompatAsrEngine();
-    ~OpenaiCompatAsrEngine() override;
+    MiMoAsrEngine();
+    ~MiMoAsrEngine() override;
 
-    OpenaiCompatAsrEngine(const OpenaiCompatAsrEngine&) = delete;
-    OpenaiCompatAsrEngine& operator=(const OpenaiCompatAsrEngine&) = delete;
+    MiMoAsrEngine(const MiMoAsrEngine&) = delete;
+    MiMoAsrEngine& operator=(const MiMoAsrEngine&) = delete;
 
     bool Init(const Config& config) override;
     void Start() override;
     void FeedAudio(const float* pcm, size_t frames) override;
     void Stop() override;
-    const char* Name() const override { return "openai-compat"; }
+    const char* Name() const override { return "mimo"; }
 
 private:
     void TranscribeWorker();
-
-    // HTTP POST multipart/form-data to the API endpoint
     std::string DoHttpRequest(const std::vector<uint8_t>& wavData);
 
     // Config
@@ -42,7 +39,6 @@ private:
     std::string apiKey_;
     std::string modelName_;
     std::string language_;
-    std::string apiFormat_; // "whisper" or "chat"
 
     // Audio buffer (accumulated during recording)
     std::vector<float> pcmBuffer_;

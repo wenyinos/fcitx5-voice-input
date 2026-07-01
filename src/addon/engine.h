@@ -62,6 +62,10 @@ private:
     std::string statusText_;
     std::string pendingPreeditText_;
     uint64_t pendingPreeditUtteranceId_ = 0;
+
+    // Push-to-talk state
+    bool pttActive_ = false;
+    int pttHeldKeyCode_ = 0;  // hardware scancode of held hotkey
 };
 
 } // namespace fcitx

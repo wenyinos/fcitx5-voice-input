@@ -58,14 +58,18 @@ void VADWorker::SetVadStatusCallback(VadStatusCallback cb) {
 void VADWorker::Start() {
     if (running_) return;
 
-    // Init Silero
-    std::string modelPath = config_.sileroModelPath.empty()
-                                ? DefaultSileroModelPath()
-                                : config_.sileroModelPath;
-    silero_ = std::make_unique<SileroVad>(modelPath);
-    if (!silero_->IsReady()) {
-        FCITX_ERROR() << "[voice-input:vadworker] SileroVad init failed";
-        return;
+    if (!directPush_) {
+        // Init Silero VAD model
+        std::string modelPath = config_.sileroModelPath.empty()
+                                    ? DefaultSileroModelPath()
+                                    : config_.sileroModelPath;
+        silero_ = std::make_unique<SileroVad>(modelPath);
+        if (!silero_->IsReady()) {
+            FCITX_ERROR() << "[voice-input:vadworker] SileroVad init failed";
+            return;
+        }
+    } else {
+        FCITX_INFO() << "[voice-input:vadworker] Direct push mode (VAD model skipped)";
     }
 
     ResetSession();
@@ -90,7 +94,24 @@ void VADWorker::WorkerLoop() {
         AudioFrame frame;
 
         if (!frameQueue_ || !frameQueue_->TryPop(frame)) {
+            // Direct push mode: flush accumulated audio when idle
+            if (directPush_ && !currentAudio_.empty()
+                && utteranceQueue_ && utteranceQueue_->Size() < 2) {
+                FlushUtterance(frame.timestamp_ms);
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+
+        if (directPush_) {
+            // Bypass VAD model, accumulate all audio
+            if (currentAudio_.empty()) {
+                startMs_ = frame.timestamp_ms;
+                if (vadStatusCb_) vadStatusCb_(true);
+            }
+            currentAudio_.insert(currentAudio_.end(),
+                                 frame.pcm.begin(), frame.pcm.end());
+            lastSpeechMs_ = frame.timestamp_ms;
             continue;
         }
 
@@ -101,6 +122,11 @@ void VADWorker::WorkerLoop() {
         }
 
         ProcessFrame(frame, prob);
+    }
+
+    // Flush remaining audio on stop
+    if (directPush_ && !currentAudio_.empty() && utteranceQueue_) {
+        FlushUtterance(lastSpeechMs_);
     }
 }
 
@@ -188,7 +214,7 @@ void VADWorker::FlushUtterance(int64_t endMs) {
                       << "ms), discarded";
     }
 
-    silero_->Reset();
+    if (silero_) silero_->Reset();
     if (vadStatusCb_) {
         vadStatusCb_(false);
     }

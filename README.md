@@ -24,9 +24,14 @@
 
 ## Features
 
-- Voice input (OpenAI Whisper API / compatible services)
-- Silero ONNX VAD for automatic speech segmentation (no push-to-talk required)
-- Queue-based pipeline: Audio Capture → VAD → ASR → EventDispatcher → commit
+- Voice input via OpenAI-compatible API (Whisper, Groq, SiliconFlow, etc.)
+- **Xiaomi MiMo ASR** (`mimo-v2.5-asr`) native support
+- **Chat Completions API format** (`/chat/completions` + JSON Base64) for providers that don't support Whisper endpoint
+- **Two recording modes**:
+  - **VAD Auto-segment**: Silero ONNX VAD automatically detects speech boundaries (hands-free)
+  - **Push-to-Talk**: Hold a hotkey (default: Right Ctrl) to record, release to commit (privacy-friendly)
+- Fetch available models from API and select via dropdown
+- LLM post-processing (correction / translation / formatting)
 - Graphical configuration via `fcitx5-configtool`
 - Smart delayed stop on window switching
 
@@ -42,6 +47,13 @@
 
 See [Build](#build) below.
 
+#### Fedora RPM
+
+```bash
+rpmbuild -ba fcitx5-voice-input.spec
+sudo dnf install ~/rpmbuild/RPMS/x86_64/fcitx5-voice-input-*.rpm
+```
+
 ### 2. Configuration
 
 After installation, open `fcitx5-configtool`, find **Voice Input** in the Input Method list and add it.
@@ -50,28 +62,40 @@ Then open the Addon config for **VoiceInput** and set:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `ASRBackend` | ASR backend | `openai` |
+| `ASRBackend` | ASR backend (`openai` / `mimo`) | `openai` |
+| `ApiFormat` | API format: Multipart Form or JSON Base64 | `whisper` |
+| `Recording Mode` | VAD auto-segment or Push-to-Talk | `vad` |
+| `Push-to-Talk Hotkey` | Hotkey for PTT mode | Right Ctrl |
 | `OpenAIEndpoint` | API endpoint URL | `https://api.openai.com/v1` |
 | `OpenAIApiKey` | API Key | **(required)** |
-| `OpenAIModel` | Model name | `whisper-1` |
-| `OpenAILanguage` | Output language, empty for auto | (empty) |
-| `AudioSource` | Input device, empty for auto | (empty) |
-| `VADThreshold` | VAD sensitivity (0-100), higher = less sensitive | `50` |
-| `SilenceThresholdMs` | Silence duration to end utterance (ms) | `800` |
+| `Voice Model` | Model name | `whisper-1` |
+| `Output Language` | Output language, empty for auto | (empty) |
+| `VAD Threshold (%)` | VAD sensitivity (0-100) | `50` |
+| `Silence Threshold (ms)` | Silence duration to end utterance | `800` |
 
 **API Key**: Fill in your API Key in `OpenAIApiKey`. Compatible with any OpenAI-format service:
 
 - [OpenAI](https://platform.openai.com/) — `https://api.openai.com/v1`
 - [Groq](https://console.groq.com/) — `https://api.groq.com/openai/v1`
 - [SiliconFlow](https://cloud.siliconflow.com) — `https://api.siliconflow.com/v1`
+- [Xiaomi MiMo](https://mimo.mi.com/) — Select backend `Xiaomi MiMo ASR`
+
+**Fetch Models**: After filling endpoint and API key, check **Fetch Available Models** → Apply → reopen config to select from the dropdown.
 
 ### 3. How to Use
 
+**VAD Mode (default):**
 1. Switch to **Voice Input** IME
 2. Start speaking — VAD automatically detects speech and records
 3. Stop speaking (default 800ms silence timeout) — audio is sent for ASR
 4. Recognition result is committed automatically
 5. Stay in Voice Input mode and continue speaking for consecutive recognition
+
+**Push-to-Talk Mode:**
+1. Switch to **Voice Input** IME
+2. Hold the hotkey (default: Right Ctrl) — recording starts
+3. Release the hotkey — audio is sent for ASR
+4. Recognition result is committed automatically
 
 When switching windows, the plugin delays stop by 200ms. Quick switch-back cancels the stop, avoiding unnecessary restarts.
 
@@ -83,12 +107,14 @@ When switching windows, the plugin delays stop by 200ms. Quick switch-back cance
 - `libpulse-simple` — PulseAudio capture (preferred)
 - `libpipewire-0.3` — PipeWire capture (fallback)
 - `jsoncpp` — JSON parsing
-- `libcurl` — HTTP client (required for OpenAI ASR)
+- `libcurl` — HTTP client (required for ASR)
 - `onnxruntime` — Silero VAD ONNX Runtime
 
 > **Arch Linux:** `sudo pacman -S fcitx5 pulseaudio pipewire jsoncpp curl onnxruntime-cpu`
 >
 > **Debian/Ubuntu:** `sudo apt install fcitx5 libpulse-dev libpipewire-0.3-dev libjsoncpp-dev libcurl4-openssl-dev libonnxruntime-dev`
+>
+> **Fedora:** `sudo dnf install fcitx5-devel pipewire-devel pulseaudio-libs-devel jsoncpp-devel libcurl-devel onnxruntime-devel`
 
 ### Build Steps
 
@@ -119,11 +145,10 @@ sudo cmake --install build --prefix /usr
 ## Notes
 
 - **API Key Security**: API key is stored in plain text in `~/.config/fcitx5/conf/voiceinput.conf`. Ensure proper file permissions
-- **Network Required**: OpenAI backend requires internet. Local ASR can be added via the AsrEngine interface
+- **Network Required**: Cloud ASR backends require internet. Local ASR can be added via the AsrEngine interface
 - **Audio Device**: Auto-selects system default input. To specify a device, choose from the `AudioSource` dropdown. Only input sources are listed (no Monitor sources)
-- **VAD Model**: The Silero VAD model is distributed via git submodule (`third_party/silero-vad/`) and copied to the install directory at build time. Run `git submodule update --init --recursive` before building
+- **VAD Model**: The Silero VAD model is distributed via git submodule (`third_party/silero-vad/`) and copied to the install directory at build time. Not required in Push-to-Talk mode
 - **PipeWire Users**: The PulseAudio backend works fine under pipewire-pulse. Native PipeWire is only used as fallback when PulseAudio is completely unavailable
-- **Local ASR**: Not yet implemented. The codebase provides an `AsrEngine` abstract interface for future local ASR integration
 - **Window Switching**: A 200ms delayed stop prevents unnecessary restarts on quick window switches. Long inactivity will stop the pipeline
 
 ## Architecture Overview

@@ -101,6 +101,7 @@ set(ADDON_SOURCES
     src/addon/vad/silero_vad.cpp
     src/addon/pipeline/pipeline.cpp
     src/addon/asr/openai_asr.cpp
+    src/addon/asr/mimo_asr.cpp
     src/addon/llm/llm_client.cpp
 )
 
@@ -116,6 +117,7 @@ set(ADDON_HEADERS
     src/addon/vad/silero_vad.h
     src/addon/asr/asr_engine.h
     src/addon/asr/openai_asr.h
+    src/addon/asr/mimo_asr.h
     src/addon/llm/llm_client.h
     src/addon/pipeline/pipeline.h
     src/addon/utils/audio_buffer.h
@@ -206,6 +208,10 @@ install(FILES ${CMAKE_BINARY_DIR}/share/fcitx5/addon/voiceinput.conf
 install(FILES ${SILERO_VAD_MODEL_SOURCE}
     DESTINATION share/fcitx5/voice-input/models
     RENAME silero_vad.onnx
+)
+
+install(FILES data/fcitx5-voice-input.svg
+    DESTINATION share/icons/hicolor/scalable/apps
 )
 
 # ─── Tests ────────────────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ public:
         std::string apiEndpoint;
         std::string apiKey;
         std::string language = "zh";
+        std::string apiFormat = "whisper"; // "whisper" or "chat"
     };
 
     // Result callback — called from worker thread, caller must dispatch

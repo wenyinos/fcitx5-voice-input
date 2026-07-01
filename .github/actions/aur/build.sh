@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+OUT_DIR="dist/aur"
+
+# Skip if prepare.sh didn't produce files (non-tag push)
+if [[ ! -f "${OUT_DIR}/PKGBUILD" ]]; then
+  echo "No PKGBUILD found, skipping AUR build"
+  echo "pkgfile=" >> "${GITHUB_OUTPUT}"
+  exit 0
+fi
+
 PKG="fcitx5-voice-input"
 WORK_DIR="dist/aur/pkg"
-OUT_DIR="dist/aur"
 
 mkdir -p "${WORK_DIR}"
 

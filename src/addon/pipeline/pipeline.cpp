@@ -24,6 +24,9 @@ Pipeline::~Pipeline() {
 void Pipeline::Init(const VoiceInputConfig& config) {
     config_ = config;
 
+    bool directPush = (config_.voiceInputMode.value() == "ptt");
+    vadWorker_->SetDirectPush(directPush);
+
     VADWorker::Config vadConfig;
     vadConfig.speechThreshold =
         static_cast<float>(config_.vadThreshold.value()) / 100.0f;
@@ -32,6 +35,7 @@ void Pipeline::Init(const VoiceInputConfig& config) {
     vadConfig.endSilenceMs = config_.silenceThresholdMs.value();
 
     FCITX_INFO() << "[voice-input] Init:"
+                 << " mode=" << (directPush ? "ptt" : "vad")
                  << " vadThreshold=" << config_.vadThreshold.value()
                  << "% silenceThresholdMs=" << config_.silenceThresholdMs.value();
 
@@ -42,6 +46,9 @@ void Pipeline::Init(const VoiceInputConfig& config) {
 
 void Pipeline::SetConfig(const VoiceInputConfig& config) {
     config_ = config;
+
+    bool directPush = (config_.voiceInputMode.value() == "ptt");
+    vadWorker_->SetDirectPush(directPush);
 
     VADWorker::Config vadConfig;
     vadConfig.speechThreshold =

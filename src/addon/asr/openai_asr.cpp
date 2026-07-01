@@ -58,6 +58,25 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return total;
 }
 
+// ── Base64 encoding ─────────────────────────────────────────────────
+const char kBase64Table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string Base64Encode(const uint8_t* data, size_t len) {
+    std::string result;
+    result.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t n = static_cast<uint32_t>(data[i]) << 16;
+        if (i + 1 < len) n |= static_cast<uint32_t>(data[i + 1]) << 8;
+        if (i + 2 < len) n |= static_cast<uint32_t>(data[i + 2]);
+        result += kBase64Table[(n >> 18) & 0x3F];
+        result += kBase64Table[(n >> 12) & 0x3F];
+        result += (i + 1 < len) ? kBase64Table[(n >> 6) & 0x3F] : '=';
+        result += (i + 2 < len) ? kBase64Table[n & 0x3F] : '=';
+    }
+    return result;
+}
+
 } // anonymous namespace
 
 // ── OpenaiCompatAsrEngine ──────────────────────────────────────────
@@ -76,6 +95,7 @@ bool OpenaiCompatAsrEngine::Init(const Config& config) {
     apiKey_ = config.apiKey;
     modelName_ = config.modelName;
     language_ = config.language;
+    apiFormat_ = config.apiFormat;
 
     if (apiEndpoint_.empty()) {
         apiEndpoint_ = "https://api.openai.com/v1";
@@ -223,7 +243,20 @@ void OpenaiCompatAsrEngine::TranscribeWorker() {
         return;
     }
 
-    std::string text = json.get("text", Json::Value("")).asString();
+    std::string text;
+    if (apiFormat_ == "chat") {
+        // Chat Completions: choices[0].message.content
+        if (json.isMember("choices") && json["choices"].isArray()
+            && !json["choices"].empty()) {
+            text = json["choices"][0]
+                       .get("message", Json::Value(Json::objectValue))
+                       .get("content", Json::Value(""))
+                       .asString();
+        }
+    } else {
+        // Whisper: text
+        text = json.get("text", Json::Value("")).asString();
+    }
     FCITX_INFO() << "[voice-input:openai] transcript: \""
                  << text << "\" (" << text.size() << " chars)";
     if (resultCb_) {
@@ -242,122 +275,146 @@ std::string OpenaiCompatAsrEngine::DoHttpRequest(const std::vector<uint8_t>& wav
     std::string response;
     struct curl_slist* headers = nullptr;
 
-    // Build URL: {endpoint}/audio/transcriptions
-    std::string url = apiEndpoint_;
-    if (!url.empty() && url.back() != '/') {
-        url += '/';
+    // Strip trailing slash from endpoint
+    std::string endpoint = apiEndpoint_;
+    if (!endpoint.empty() && endpoint.back() == '/') endpoint.pop_back();
+
+    // Curl options common to both formats
+    auto setupCurl = [&]() {
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "fcitx5-voice-input/0.1.0");
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+                         +[](void* p, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+                             return static_cast<OpenaiCompatAsrEngine*>(p)->cancelled_ ? 1 : 0;
+                         });
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    };
+
+    if (apiFormat_ == "chat") {
+        // ── Chat Completions format ────────────────────────────────
+        std::string url = endpoint + "/chat/completions";
+        FCITX_INFO() << "[voice-input:openai] POST " << url
+                     << " (chat, wav=" << wavData.size() << " bytes)";
+
+        std::string audioBase64 = Base64Encode(wavData.data(), wavData.size());
+
+        Json::Value body;
+        body["model"] = modelName_;
+        Json::Value msg;
+        msg["role"] = "user";
+        Json::Value content;
+        content["type"] = "input_audio";
+        content["input_audio"]["data"] = "data:audio/wav;base64," + audioBase64;
+        msg["content"].append(content);
+        body["messages"].append(msg);
+        if (!language_.empty()) {
+            body["asr_options"]["language"] = language_;
+        }
+
+        Json::StreamWriterBuilder wb;
+        wb["indentation"] = "";
+        std::string jsonBody = Json::writeString(wb, body);
+
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        std::string auth = "Authorization: Bearer " + apiKey_;
+        headers = curl_slist_append(headers, auth.c_str());
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonBody.c_str());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(jsonBody.size()));
+        setupCurl();
+    } else {
+        // ── Whisper format (multipart) ─────────────────────────────
+        std::string url = endpoint + "/audio/transcriptions";
+        FCITX_INFO() << "[voice-input:openai] POST " << url
+                     << " (whisper, wav=" << wavData.size() << " bytes)";
+
+        curl_mime* mime = curl_mime_init(curl);
+        curl_mimepart* part;
+
+        part = curl_mime_addpart(mime);
+        curl_mime_name(part, "file");
+        curl_mime_data(part, reinterpret_cast<const char*>(wavData.data()), wavData.size());
+        curl_mime_filename(part, "audio.wav");
+        curl_mime_type(part, "audio/wav");
+
+        part = curl_mime_addpart(mime);
+        curl_mime_name(part, "model");
+        curl_mime_data(part, modelName_.c_str(), CURL_ZERO_TERMINATED);
+
+        part = curl_mime_addpart(mime);
+        curl_mime_name(part, "language");
+        curl_mime_data(part, language_.c_str(), CURL_ZERO_TERMINATED);
+
+        part = curl_mime_addpart(mime);
+        curl_mime_name(part, "response_format");
+        curl_mime_data(part, "json", CURL_ZERO_TERMINATED);
+
+        std::string auth = "Authorization: Bearer " + apiKey_;
+        headers = curl_slist_append(headers, auth.c_str());
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+        setupCurl();
+
+        // Perform and cleanup mime before checking result
+        CURLcode res = curl_easy_perform(curl);
+        long httpCode = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        curl_mime_free(mime);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+
+        if (res == CURLE_ABORTED_BY_CALLBACK) return "";
+        if (res != CURLE_OK) {
+            FCITX_ERROR() << "[voice-input:openai] HTTP failed: " << curl_easy_strerror(res);
+            if (errorCb_) errorCb_("HTTP request failed");
+            return "";
+        }
+        if (httpCode != 200) {
+            std::string errMsg = "HTTP " + std::to_string(httpCode);
+            if (!response.empty()) {
+                Json::Value ej; Json::Reader er;
+                if (er.parse(response, ej) && ej.isMember("error"))
+                    errMsg += ": " + ej["error"].get("message", Json::Value(response)).asString();
+                else errMsg += ": " + response;
+            }
+            FCITX_ERROR() << "[voice-input:openai] API error: " << errMsg;
+            if (errorCb_) errorCb_(errMsg);
+            return "";
+        }
+        return response;
     }
-    url += "audio/transcriptions";
 
-    FCITX_INFO() << "[voice-input:openai] POST " << url
-                 << " (wav=" << wavData.size() << " bytes)";
-
-    // Set up multipart form
-    curl_mime* mime = curl_mime_init(curl);
-    curl_mimepart* part;
-
-    // Audio file
-    part = curl_mime_addpart(mime);
-    curl_mime_name(part, "file");
-    curl_mime_data(part, reinterpret_cast<const char*>(wavData.data()), wavData.size());
-    curl_mime_filename(part, "audio.wav");
-    curl_mime_type(part, "audio/wav");
-
-    // Model
-    part = curl_mime_addpart(mime);
-    curl_mime_name(part, "model");
-    curl_mime_data(part, modelName_.c_str(), CURL_ZERO_TERMINATED);
-
-    // Language
-    part = curl_mime_addpart(mime);
-    curl_mime_name(part, "language");
-    curl_mime_data(part, language_.c_str(), CURL_ZERO_TERMINATED);
-
-
-    // Response format
-    part = curl_mime_addpart(mime);
-    curl_mime_name(part, "response_format");
-    curl_mime_data(part, "json", CURL_ZERO_TERMINATED);
-
-    // Headers
-    std::string authHeader = "Authorization: Bearer " + apiKey_;
-    headers = curl_slist_append(headers, authHeader.c_str());
-
-    // Curl options
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "fcitx5-voice-input/0.1.0");
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
-                     +[](void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
-                         auto* self = static_cast<OpenaiCompatAsrEngine*>(clientp);
-                         return self->cancelled_ ? 1 : 0;
-                     });
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-
-    // Also grab the Content-Type header to detect errors in non-JSON responses
-    std::string contentType;
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
-                     +[](void* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
-                         auto* ct = static_cast<std::string*>(userdata);
-                         std::string line(static_cast<char*>(ptr), size * nmemb);
-                         if (line.rfind("Content-Type:", 0) == 0) {
-                             *ct = line.substr(line.find(':') + 1);
-                             if (!ct->empty() && (*ct)[0] == ' ') ct->erase(0, 1);
-                             if (!ct->empty() && (*ct).back() == '\r') ct->pop_back();
-                             if (!ct->empty() && (*ct).back() == '\n') ct->pop_back();
-                         }
-                         return size * nmemb;
-                     });
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &contentType);
-
-    // Perform request
+    // ── Common perform + error handling (chat path) ────────────────
     CURLcode res = curl_easy_perform(curl);
-
     long httpCode = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
-
-    // Cleanup
-    curl_mime_free(mime);
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
-    if (res == CURLE_ABORTED_BY_CALLBACK) {
-        return "";
-    }
+    if (res == CURLE_ABORTED_BY_CALLBACK) return "";
     if (res != CURLE_OK) {
-        std::string err = curl_easy_strerror(res);
-        FCITX_ERROR() << "[voice-input:openai] HTTP request failed: " << err
-                      << " (url=" << url << ")";
-        if (errorCb_) errorCb_("HTTP request failed: " + err);
+        FCITX_ERROR() << "[voice-input:openai] HTTP failed: " << curl_easy_strerror(res);
+        if (errorCb_) errorCb_("HTTP request failed");
         return "";
     }
-
-    FCITX_DEBUG() << "[voice-input:openai] HTTP " << httpCode
-                  << " response=" << response.size() << " bytes"
-                  << " contentType=" << contentType;
-
     if (httpCode != 200) {
         std::string errMsg = "HTTP " + std::to_string(httpCode);
         if (!response.empty()) {
-            // Try to extract error message from response
-            Json::Value ejson;
-            Json::Reader ereader;
-            if (ereader.parse(response, ejson) && ejson.isMember("error")) {
-                errMsg += ": " + ejson["error"].get("message", Json::Value(response)).asString();
-            } else {
-                errMsg += ": " + response;
-            }
+            Json::Value ej; Json::Reader er;
+            if (er.parse(response, ej) && ej.isMember("error"))
+                errMsg += ": " + ej["error"].get("message", Json::Value(response)).asString();
+            else errMsg += ": " + response;
         }
         FCITX_ERROR() << "[voice-input:openai] API error: " << errMsg;
-        if (errorCb_) errorCb_("API error: " + errMsg);
+        if (errorCb_) errorCb_(errMsg);
         return "";
     }
-
     return response;
 }
 

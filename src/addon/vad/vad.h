@@ -46,6 +46,9 @@ public:
     void Start();
     void Stop();
 
+    // When true, skip VAD model and push all audio directly to utterance queue
+    void SetDirectPush(bool direct) { directPush_ = direct; }
+
     bool IsRunning() const { return running_.load(); }
 
 private:
@@ -67,6 +70,9 @@ private:
 
     // Callback
     VadStatusCallback vadStatusCb_;
+
+    // Direct push mode (skip VAD model)
+    bool directPush_ = false;
 
     // Session state
     enum class State { Idle, Speaking };

@@ -17,6 +17,7 @@
 #include "engine.h"
 
 #include "asr/openai_asr.h"
+#include "asr/mimo_asr.h"
 #include "llm/llm_client.h"
 
 namespace fcitx {
@@ -61,14 +62,24 @@ void VoiceInputEngine::activate(const InputMethodEntry& entry,
     pipeline_->SetGeneration(generation);
 
     bool wasRunning = pipeline_->IsRunning();
-    pipeline_->Start();
+    bool isPTT = (config_.voiceInputMode.value() == "ptt");
+
+    if (!isPTT) {
+        // VAD mode: auto-start pipeline
+        pipeline_->Start();
+    }
 
     FCITX_INFO() << "[voice-input] Activate: gen=" << generation
                  << " wasRunning=" << wasRunning
+                 << " ptt=" << isPTT
                  << " ic=" << (activeIc_ != nullptr);
 
     statusText_.clear();
-    SetStatus(_("语音输入就绪"));
+    if (isPTT) {
+        SetStatus(_("Hold hotkey to record"));
+    } else {
+        SetStatus(_("Voice input ready"));
+    }
 }
 
 void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
@@ -80,6 +91,8 @@ void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
 
     FCITX_INFO() << "[voice-input] Deactivate: gen=" << generation;
 
+    pttActive_ = false;
+    pttHeldKeyCode_ = 0;
     ClearUI();
 
     delayedStopEvent_ = instance_->eventLoop().addTimeEvent(
@@ -104,7 +117,7 @@ void VoiceInputEngine::deactivate(const InputMethodEntry& entry,
 
 std::vector<InputMethodEntry> VoiceInputEngine::listInputMethods() {
     std::vector<InputMethodEntry> entries;
-    entries.emplace_back("voiceinput", _("Voice Input"), "zh_CN",
+    entries.emplace_back("voiceinput", _("Fcitx5 Voice Input"), "zh_CN",
                          "voiceinput");
     entries.back().setConfigurable(true);
     return entries;
@@ -113,17 +126,55 @@ std::vector<InputMethodEntry> VoiceInputEngine::listInputMethods() {
 void VoiceInputEngine::keyEvent(const InputMethodEntry& entry,
                                 KeyEvent& keyEvent) {
     FCITX_UNUSED(entry);
+    FCITX_INFO() << "[voice-input] keyEvent: sym=" << keyEvent.rawKey().sym()
+                 << " code=" << keyEvent.rawKey().code()
+                 << " release=" << keyEvent.isRelease()
+                 << " ptt=" << config_.voiceInputMode.value()
+                 << " ic=" << (activeIc_ != nullptr);
+
     // Commit pending preedit on any key press
-    if (!pendingPreeditText_.empty() && activeIc_) {
+    if (!pendingPreeditText_.empty() && activeIc_ && !keyEvent.isRelease()) {
         activeIc_->commitString(pendingPreeditText_);
         activeIc_->inputPanel().reset();
         activeIc_->updateUserInterface(UserInterfaceComponent::InputPanel);
-        SetStatus(_("语音输入就绪"));
+        SetStatus(_("Voice input ready"));
         pendingPreeditText_.clear();
         pendingPreeditUtteranceId_ = 0;
-        FCITX_DEBUG() << "[voice-input] Preedit committed on keyEvent";
     }
-    FCITX_UNUSED(keyEvent);
+
+    // Push-to-talk hotkey handling
+    if (config_.voiceInputMode.value() != "ptt") return;
+    if (!pipeline_) return;
+
+    const auto& hotkeys = config_.pttHotkey.value();
+    bool isPTTKey = false;
+    for (const auto& k : hotkeys) {
+        if (keyEvent.rawKey().sym() == k.sym()) {
+            isPTTKey = true;
+            break;
+        }
+    }
+    if (!isPTTKey) return;
+
+    FCITX_INFO() << "[voice-input] PTT key matched: release=" << keyEvent.isRelease();
+
+    if (keyEvent.isRelease() && keyEvent.rawKey().code() == pttHeldKeyCode_) {
+        pttHeldKeyCode_ = 0;
+        if (pttActive_) {
+            pttActive_ = false;
+            pipeline_->Stop();
+            SetStatus(_("Recognizing..."));
+            FCITX_INFO() << "[voice-input] PTT released";
+        }
+    } else if (!keyEvent.isRelease()) {
+        pttHeldKeyCode_ = keyEvent.rawKey().code();
+        if (!pttActive_) {
+            pttActive_ = true;
+            pipeline_->Start();
+            SetStatus(_("Recording..."));
+            FCITX_INFO() << "[voice-input] PTT pressed";
+        }
+    }
 }
 
 void VoiceInputEngine::OnAsrResult(const std::string& text) {
@@ -176,7 +227,7 @@ void VoiceInputEngine::PollResults() {
                     activeIc_->commitString(result.text);
                     activeIc_->inputPanel().reset();
                     activeIc_->updateUserInterface(UserInterfaceComponent::InputPanel);
-                    SetStatus(_("语音输入就绪"));
+                    SetStatus(_("Voice input ready"));
                     pendingPreeditText_.clear();
                     pendingPreeditUtteranceId_ = 0;
                 } else {
@@ -192,7 +243,7 @@ void VoiceInputEngine::PollResults() {
                              << " llmActive=" << llmActive;
                 if (llmActive) {
                     activeIc_->inputPanel().setPreedit(Text(result.text));
-                    activeIc_->inputPanel().setAuxDown(Text(_("修正中...")));
+                    activeIc_->inputPanel().setAuxDown(Text(_("Refining...")));
                     statusText_ = result.text;
                     activeIc_->updateUserInterface(UserInterfaceComponent::InputPanel);
                     activeIc_->updateUserInterface(UserInterfaceComponent::StatusArea);
@@ -200,7 +251,7 @@ void VoiceInputEngine::PollResults() {
                     pendingPreeditUtteranceId_ = result.utteranceId;
                 } else if (config_.autoCommit.value()) {
                     activeIc_->commitString(result.text);
-                    SetStatus(_("语音输入就绪"));
+                    SetStatus(_("Voice input ready"));
                     pendingPreeditText_.clear();
                     pendingPreeditUtteranceId_ = 0;
                 } else {
@@ -267,7 +318,7 @@ void VoiceInputEngine::InitializeIfNeeded() {
     pipeline_->SetVadStatusCallback(
         [this](bool speaking) {
             if (speaking) {
-                SetStatus(_("正在录音中..."));
+                SetStatus(_("Recording in progress..."));
                 eventDispatcher_.schedule([this]() {
                     if (!activeIc_) return;
                     activeIc_->inputPanel().setPreedit(Text(" "));
@@ -275,7 +326,7 @@ void VoiceInputEngine::InitializeIfNeeded() {
                         UserInterfaceComponent::InputPanel);
                 });
             } else {
-                SetStatus(_("语音输入就绪"));
+                SetStatus(_("Voice input ready"));
             }
         });
 
@@ -286,15 +337,45 @@ void VoiceInputEngine::InitializeIfNeeded() {
     asrConfig.apiKey = config_.openaiApiKey.value();
     asrConfig.modelName = config_.openaiModel.value();
     asrConfig.language = config_.openaiLanguage.value();
+    asrConfig.apiFormat = config_.apiFormat.value();
 
-    auto asr = std::make_unique<OpenaiCompatAsrEngine>();
-    if (asr->Init(asrConfig)) {
-        pipeline_->SetAsrEngine(std::move(asr));
-        FCITX_INFO() << "[voice-input] Using OpenAI-compatible ASR: "
-                     << config_.openaiEndpoint.value()
-                     << " model=" << config_.openaiModel.value();
+    std::string backend = config_.asrBackend.value();
+    std::unique_ptr<AsrEngine> asr;
+
+    if (backend == "mimo") {
+        // MiMo uses its own endpoint; fall back to default if user hasn't changed it
+        if (asrConfig.apiEndpoint.empty()
+            || asrConfig.apiEndpoint == "https://api.openai.com/v1") {
+            asrConfig.apiEndpoint = "https://api.xiaomimimo.com/v1";
+        }
+        // Use MiMo default model instead of OpenAI's whisper-1
+        if (asrConfig.modelName.empty() || asrConfig.modelName == "whisper-1") {
+            asrConfig.modelName = "mimo-v2.5-asr";
+            config_.openaiModel.setValue(asrConfig.modelName);
+        }
+        auto mimo = std::make_unique<MiMoAsrEngine>();
+        if (mimo->Init(asrConfig)) {
+            asr = std::move(mimo);
+            FCITX_INFO() << "[voice-input] Using MiMo ASR: "
+                         << asrConfig.apiEndpoint
+                         << " model=" << asrConfig.modelName;
+        } else {
+            FCITX_WARN() << "[voice-input] MiMo ASR init failed";
+        }
     } else {
-        FCITX_WARN() << "[voice-input] OpenAI ASR init failed";
+        auto openai = std::make_unique<OpenaiCompatAsrEngine>();
+        if (openai->Init(asrConfig)) {
+            asr = std::move(openai);
+            FCITX_INFO() << "[voice-input] Using OpenAI-compatible ASR: "
+                         << config_.openaiEndpoint.value()
+                         << " model=" << asrConfig.modelName;
+        } else {
+            FCITX_WARN() << "[voice-input] OpenAI ASR init failed";
+        }
+    }
+
+    if (asr) {
+        pipeline_->SetAsrEngine(std::move(asr));
     }
 
     // LLM post-processing

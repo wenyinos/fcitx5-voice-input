@@ -20,6 +20,7 @@ struct Utterance {
     int64_t start_ms = 0;
     int64_t end_ms = 0;
     std::vector<int16_t> pcm;
+    bool directPush = false;  // true = skip VAD, push directly to ASR
 };
 
 struct AsrResult {

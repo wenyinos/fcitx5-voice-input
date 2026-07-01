@@ -3,11 +3,20 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
-msgid "Voice Input"
-msgstr "语音"
+msgid "Fcitx5 Voice Input"
+msgstr "Fcitx5 AI语音输入"
 
 msgid "ASR Backend"
 msgstr "语音识别后端"
+
+msgid "API Format"
+msgstr "API 格式"
+
+msgid "Recording Mode"
+msgstr "录音模式"
+
+msgid "Push-to-Talk Hotkey"
+msgstr "Push-to-Talk 热键"
 
 msgid "OpenAI API Endpoint"
 msgstr "OpenAI API 地址"
@@ -15,32 +24,23 @@ msgstr "OpenAI API 地址"
 msgid "OpenAI API Key"
 msgstr "OpenAI API 密钥"
 
-msgid "语音模型"
+msgid "Voice Model"
 msgstr "语音模型"
+
+msgid "Select from available models"
+msgstr "从可用模型中选择"
+
+msgid "Fetch Available Models"
+msgstr "获取可用模型"
 
 msgid "Output Language"
 msgstr "输出语言"
 
-msgid "VAD Threshold (%)"
-msgstr "语音检测阈值 (%)"
-
-msgid "Silence Threshold (ms)"
-msgstr "静音检测阈值 (毫秒)"
-
-msgid "后处理 LLM 模型"
+msgid "Post-processing LLM Model"
 msgstr "后处理 LLM 模型"
 
-msgid "后处理系统提示词"
+msgid "Post-processing System Prompt"
 msgstr "后处理系统提示词"
-
-msgid "语音输入就绪"
-msgstr "语音输入就绪"
-
-msgid "修正中..."
-msgstr "修正中..."
-
-msgid "正在录音中..."
-msgstr "正在录音中..."
 
 msgid "LLM Post-processing"
 msgstr "LLM 后处理"
@@ -50,3 +50,33 @@ msgstr "LLM 流式输出"
 
 msgid "Auto-Commit when no LLM"
 msgstr "无 LLM 时自动上屏"
+
+msgid "VAD Threshold (%)"
+msgstr "语音检测阈值 (%)"
+
+msgid "Silence Threshold (ms)"
+msgstr "静音检测阈值 (毫秒)"
+
+msgid "VAD Auto-segment (hands-free)"
+msgstr "VAD 自动分段（免按键）"
+
+msgid "Hold hotkey to record (PTT)"
+msgstr "按住热键录音（Push-to-Talk）"
+
+msgid "Voice input ready"
+msgstr "语音输入就绪"
+
+msgid "Hold hotkey to record"
+msgstr "按住热键开始录音"
+
+msgid "Recording..."
+msgstr "录音中..."
+
+msgid "Recording in progress..."
+msgstr "正在录音中..."
+
+msgid "Recognizing..."
+msgstr "识别中..."
+
+msgid "Refining..."
+msgstr "修正中..."

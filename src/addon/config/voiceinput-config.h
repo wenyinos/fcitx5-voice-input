@@ -6,6 +6,7 @@
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/option.h>
 #include <fcitx-utils/i18n.h>
+#include <fcitx-utils/key.h>
 
 namespace fcitx {
 
@@ -14,6 +15,30 @@ struct AsrBackendAnnotation : public EnumAnnotation {
         EnumAnnotation::dumpDescription(config);
         config.setValueByPath("Enum/0", "openai");
         config.setValueByPath("EnumI18n/0", "OpenAI Compatible");
+        config.setValueByPath("Enum/1", "mimo");
+        config.setValueByPath("EnumI18n/1", "Xiaomi MiMo ASR");
+    }
+};
+
+struct VoiceInputModeAnnotation : public EnumAnnotation {
+    void dumpDescription(RawConfig &config) const {
+        EnumAnnotation::dumpDescription(config);
+        config.setValueByPath("Enum/0", "vad");
+        config.setValueByPath("EnumI18n/0", _("VAD Auto-segment (hands-free)"));
+        config.setValueByPath("Enum/1", "ptt");
+        config.setValueByPath("EnumI18n/1", _("Hold hotkey to record (PTT)"));
+    }
+};
+
+struct ApiFormatAnnotation : public EnumAnnotation {
+    void dumpDescription(RawConfig &config) const {
+        EnumAnnotation::dumpDescription(config);
+        config.setValueByPath("Enum/0", "whisper");
+        config.setValueByPath("EnumI18n/0",
+            "Multipart Form (/audio/transcriptions)");
+        config.setValueByPath("Enum/1", "chat");
+        config.setValueByPath("EnumI18n/1",
+            "JSON Base64 (/chat/completions)");
     }
 };
 
@@ -38,6 +63,23 @@ FCITX_CONFIGURATION(VoiceInputConfig,
            DefaultMarshaller<std::string>, AsrBackendAnnotation>
         asrBackend{this, "ASRBackend", _("ASR Backend"), "openai"};
 
+    // API format (whisper or chat completions)
+    Option<std::string, NoConstrain<std::string>,
+           DefaultMarshaller<std::string>, ApiFormatAnnotation>
+        apiFormat{this, "ApiFormat", _("API Format"), "whisper"};
+
+    // Voice input mode
+    Option<std::string, NoConstrain<std::string>,
+           DefaultMarshaller<std::string>, VoiceInputModeAnnotation>
+        voiceInputMode{this, "VoiceInputMode", _("Recording Mode"), "vad"};
+
+    // Push-to-talk hotkey (default: Right Control)
+    KeyListOption pttHotkey{this, "PTTHotkey", _("Push-to-Talk Hotkey"),
+                            KeyList{Key(FcitxKey_Control_R)},
+                            KeyListConstrain(
+                                KeyConstrainFlags(KeyConstrainFlag::AllowModifierOnly)
+                                | KeyConstrainFlag::AllowModifierLess)};
+
     // OpenAI-compatible API settings
     Option<std::string> openaiEndpoint{this, "OpenAIEndpoint",
                                         _("OpenAI API Endpoint"),
@@ -45,7 +87,7 @@ FCITX_CONFIGURATION(VoiceInputConfig,
     Option<std::string> openaiApiKey{this, "OpenAIApiKey",
                                       _("OpenAI API Key"), ""};
     Option<std::string> openaiModel{this, "OpenAIModel",
-                                     _("语音模型"),
+                                     _("Voice Model"),
                                      "whisper-1"};
     Option<std::string, NoConstrain<std::string>,
            DefaultMarshaller<std::string>, OpenaiLanguageAnnotation>
@@ -55,9 +97,9 @@ FCITX_CONFIGURATION(VoiceInputConfig,
     Option<bool> llmEnabled{this, "LLMEnabled",
                              _("LLM Post-processing"), false};
     Option<std::string> llmModel{this, "LLMModel",
-                                  _("后处理 LLM 模型"), ""};
+                                  _("Post-processing LLM Model"), ""};
     Option<std::string> llmSystemPrompt{this, "LLMSystemPrompt",
-                                         _("后处理系统提示词"), ""};
+                                         _("Post-processing System Prompt"), ""};
     Option<bool> llmStream{this, "LLMStream",
                             _("LLM Streaming"), true};
 
