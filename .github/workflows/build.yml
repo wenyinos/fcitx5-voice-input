@@ -48,8 +48,6 @@ jobs:
         include:
           - target: fedora44
             image: fedora:44
-          - target: rhel10
-            image: registry.access.redhat.com/ubi9:latest
     steps:
       - uses: actions/checkout@v4
         with:
